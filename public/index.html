@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Paper Annotator</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="bg-shape one"></div>
+    <div class="bg-shape two"></div>
+
+    <header class="app-header">
+      <div>
+        <div class="app-title">Paper Annotator</div>
+        <div class="app-subtitle">Named entities + canonical statements in one pass.</div>
+      </div>
+      <div class="upload-bar">
+        <input type="file" id="pdfInput" accept="application/pdf" />
+        <button id="uploadBtn">Upload PDF</button>
+        <span id="paperInfo" class="muted"></span>
+      </div>
+    </header>
+
+    <main class="app-grid">
+      <section class="panel" id="metadataPanel">
+        <div class="panel-header">
+          <h2>Metadata</h2>
+          <button id="saveMetaBtn" class="ghost">Save</button>
+        </div>
+        <div id="metadataForm" class="stack"></div>
+      </section>
+
+      <section class="panel doc-panel">
+        <div class="panel-header">
+          <h2>Document</h2>
+          <div class="doc-actions">
+            <button id="addHighlightBtn">Add Highlight</button>
+            <span id="highlightHint" class="muted"></span>
+          </div>
+        </div>
+        <div id="docView" class="doc-view"></div>
+        <div class="list-block">
+          <div class="subhead">Highlights</div>
+          <div id="highlightList" class="list"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="annotatePanel">
+        <div class="panel-header">
+          <h2>Annotation</h2>
+          <button id="saveAnnoBtn">Submit</button>
+        </div>
+
+        <div class="tab-bar">
+          <button class="tab active" data-tab="concept">Concept</button>
+          <button class="tab" data-tab="argument">Argument</button>
+        </div>
+
+        <div id="conceptTab" class="tab-content active">
+          <div class="stack">
+            <label>Label <input id="conceptLabel" type="text" placeholder="e.g., Latent Dirichlet Allocation" /></label>
+            <label>Aliases <input id="conceptAliases" type="text" placeholder="Comma-separated" /></label>
+            <label>Type
+              <select id="conceptType"></select>
+            </label>
+            <div class="roles">
+              <span>Roles</span>
+              <label><input type="checkbox" value="argument_anchor" /> argument_anchor</label>
+              <label><input type="checkbox" value="background" /> background</label>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="subhead">Source refs</div>
+            <div id="highlightPicker"></div>
+          </div>
+          <button id="addConceptBtn">Add Concept</button>
+        </div>
+
+        <div id="argumentTab" class="tab-content">
+          <div class="stack">
+            <label>Canonical Text
+              <textarea id="argumentText" rows="4" placeholder="Minimal assertion..."></textarea>
+            </label>
+            <label>Type
+              <select id="argumentType"></select>
+            </label>
+            <label>Concept refs
+              <div id="argumentConceptRefs" class="tag-list"></div>
+            </label>
+          </div>
+          <div class="stack">
+            <div class="subhead">Source refs</div>
+            <div id="highlightPickerArgument"></div>
+          </div>
+          <button id="addArgumentBtn">Add Argument</button>
+        </div>
+
+        <div class="list-block">
+          <div class="subhead">Concepts</div>
+          <div id="conceptList" class="list"></div>
+        </div>
+
+        <div class="list-block">
+          <div class="subhead">Arguments</div>
+          <div id="argumentList" class="list"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
