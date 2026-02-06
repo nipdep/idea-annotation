@@ -474,6 +474,8 @@ function renderPaperFocusedGraph(svg, item) {
   bg.setAttribute("fill", "transparent");
   bg.addEventListener("click", () => {
     state.library.selectedId = null;
+    state.library.selectedInstance = null;
+    state.library.expanded = new Set();
     renderLibraryGraph();
     renderLibraryTable();
     renderLibraryDetail();
@@ -498,23 +500,23 @@ function renderPaperFocusedGraph(svg, item) {
 
   const groups = buildArgumentGroups(item);
 
-  const paperNode = { id: "Work", label: "Work", x: 400, y: 80 };
-  const argumentNode = { id: "Argument", label: "Argument", x: 400, y: 160 };
+  const paperNode = { id: "Work", label: "Work", x: 400, y: 70 };
+  const argumentNode = { id: "Argument", label: "Argument", x: 400, y: 150 };
   const nodes = [
-    { id: "Issue", label: "Issue", x: 170, y: 260 },
-    { id: "Idea", label: "Idea", x: 630, y: 260 },
-    { id: "Approach", label: "Approach", x: 400, y: 260 },
-    { id: "Backing", label: "Backing", x: 60, y: 340 },
-    { id: "Evidence", label: "Evidence", x: 340, y: 360 },
-    { id: "Claim", label: "Claim", x: 640, y: 360 },
-    { id: "Warrant", label: "Warrant", x: 520, y: 360 },
-    { id: "Assumption", label: "Assumption", x: 440, y: 440 },
-    { id: "Artifact", label: "Artifact", x: 280, y: 440 },
+    { id: "Issue", label: "Issue", x: 180, y: 250 },
+    { id: "Idea", label: "Idea", x: 620, y: 250 },
+    { id: "Approach", label: "Approach", x: 400, y: 250 },
+    { id: "Backing", label: "Backing", x: 90, y: 340 },
+    { id: "Evidence", label: "Evidence", x: 360, y: 340 },
+    { id: "Claim", label: "Claim", x: 640, y: 340 },
+    { id: "Warrant", label: "Warrant", x: 520, y: 300 },
+    { id: "Assumption", label: "Assumption", x: 470, y: 440 },
+    { id: "Artifact", label: "Artifact", x: 300, y: 440 },
   ];
 
   drawNode(svg, paperNode.x, paperNode.y, paperNode.label, "graph-node paper-node");
   drawNode(svg, argumentNode.x, argumentNode.y, argumentNode.label, "graph-node");
-  drawEdge(svg, paperNode.x, paperNode.y + 18, argumentNode.x, argumentNode.y - 18, "contains");
+  drawEdge(svg, paperNode.x, paperNode.y + 18, argumentNode.x, argumentNode.y - 18, "contains", -12);
 
   const edges = [
     { from: argumentNode, to: nodes.find((n) => n.id === "Idea"), label: "proposesIdea" },
@@ -541,7 +543,7 @@ function renderPaperFocusedGraph(svg, item) {
 
   edges.forEach((edge) => {
     if (!edge.from || !edge.to) return;
-    drawEdge(svg, edge.from.x, edge.from.y, edge.to.x, edge.to.y, edge.label);
+    drawEdge(svg, edge.from.x, edge.from.y, edge.to.x, edge.to.y, edge.label, edge.from.id === "Argument" ? -10 : -6);
   });
 
   nodes.forEach((node) => {
@@ -577,7 +579,7 @@ function drawNode(svg, x, y, label, className, onClick) {
   svg.appendChild(group);
 }
 
-function drawEdge(svg, x1, y1, x2, y2, label) {
+function drawEdge(svg, x1, y1, x2, y2, label, offset = -6) {
   const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
   line.setAttribute("x1", x1);
   line.setAttribute("y1", y1);
@@ -590,7 +592,7 @@ function drawEdge(svg, x1, y1, x2, y2, label) {
   if (label) {
     const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
     text.setAttribute("x", (x1 + x2) / 2);
-    text.setAttribute("y", (y1 + y2) / 2 - 6);
+    text.setAttribute("y", (y1 + y2) / 2 + offset);
     text.setAttribute("text-anchor", "middle");
     text.setAttribute("class", "graph-edge-label");
     text.textContent = label;
@@ -601,10 +603,20 @@ function drawEdge(svg, x1, y1, x2, y2, label) {
 function toggleGraphGroup(groupId) {
   if (state.library.expanded.has(groupId)) {
     state.library.expanded.delete(groupId);
+    if (state.library.selectedInstance) {
+      const current = state.library.selectedInstance.id;
+      const isInGroup = (buildArgumentGroups(state.library.filtered.find((item) => item.paper_id === state.library.selectedId))[
+        groupId
+      ] || []).some((inst) => inst.id === current);
+      if (isInGroup) {
+        state.library.selectedInstance = null;
+      }
+    }
   } else {
     state.library.expanded.add(groupId);
   }
   renderLibraryGraph();
+  renderLibraryDetail();
 }
 
 function renderInstanceNodes(svg, parentNode, instances) {
@@ -639,18 +651,6 @@ function renderLibraryDetail() {
     return;
   }
 
-  const metadata = selected.metadata || {};
-  const details = document.createElement("div");
-  details.className = "stack";
-  details.innerHTML = `
-    <div><strong>${metadata.title || "Untitled"}</strong></div>
-    <div class="meta">${flattenAuthors(metadata.authors) || "Unknown authors"}</div>
-    <div class="meta">Year: ${metadata.year || "-"}</div>
-    <div class="meta">Venue: ${metadata.venue || "-"}</div>
-    <div class="meta">DOI: ${metadata.doi || "-"}</div>
-  `;
-  container.appendChild(details);
-
   if (state.library.selectedInstance) {
     const inst = state.library.selectedInstance;
     const block = document.createElement("div");
@@ -684,7 +684,20 @@ function renderLibraryDetail() {
     }
     block.appendChild(info);
     container.appendChild(block);
+    return;
   }
+
+  const metadata = selected.metadata || {};
+  const details = document.createElement("div");
+  details.className = "stack";
+  details.innerHTML = `
+    <div><strong>${metadata.title || "Untitled"}</strong></div>
+    <div class="meta">${flattenAuthors(metadata.authors) || "Unknown authors"}</div>
+    <div class="meta">Year: ${metadata.year || "-"}</div>
+    <div class="meta">Venue: ${metadata.venue || "-"}</div>
+    <div class="meta">DOI: ${metadata.doi || "-"}</div>
+  `;
+  container.appendChild(details);
 
   const conceptBlock = document.createElement("div");
   conceptBlock.className = "list-block";
