@@ -175,9 +175,10 @@ function renderConceptTypePicker(path = state.conceptTypePath) {
       select.selectedIndex = 0;
     }
 
+    const depthIndex = depth;
     select.addEventListener("change", (e) => {
       const nextValue = e.target.value;
-      const nextPath = state.conceptTypePath.slice(0, depth);
+      const nextPath = state.conceptTypePath.slice(0, depthIndex);
       if (nextValue) nextPath.push(nextValue);
       state.conceptTypePath = nextPath;
       renderConceptTypePicker(nextPath);
