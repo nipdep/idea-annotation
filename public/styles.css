@@ -711,6 +711,22 @@ mark.used {
   font-size: 0.9rem;
 }
 
+.ref-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #f4efe8;
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.ref-pill input {
+  margin: 0;
+}
+
 .type-picker {
   display: grid;
   gap: 8px;

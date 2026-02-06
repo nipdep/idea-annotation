@@ -989,6 +989,10 @@ function renderHighlightPickers() {
       row.className = "highlight-pill";
       row.title = `Section: ${hl.section}${hl.page ? ` - Page ${hl.page}` : ""}`;
 
+      const text = document.createElement("span");
+      text.className = "highlight-pill-text";
+      text.textContent = hl.text;
+
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
       checkbox.checked = state.highlightSelection[key].has(hl.id);
@@ -1000,12 +1004,8 @@ function renderHighlightPickers() {
         }
       });
 
-      const text = document.createElement("span");
-      text.className = "highlight-pill-text";
-      text.textContent = hl.text;
-
-      row.appendChild(checkbox);
       row.appendChild(text);
+      row.appendChild(checkbox);
       container.appendChild(row);
     });
   });
@@ -1112,12 +1112,14 @@ function renderArgumentConceptRefs() {
 
   state.annotations.concepts.forEach((concept) => {
     const label = document.createElement("label");
-    label.className = "tag";
+    label.className = "ref-pill";
+    const text = document.createElement("span");
+    text.textContent = `${concept.concept_id} ${concept.label}`;
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.value = concept.concept_id;
+    label.appendChild(text);
     label.appendChild(checkbox);
-    label.append(` ${concept.concept_id} ${concept.label}`);
     container.appendChild(label);
   });
 }
