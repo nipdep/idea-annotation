@@ -661,42 +661,99 @@ function renderLibraryDetail() {
     if (inst.kind === "argument") {
       const arg = (selected.arguments || []).find((a) => a.argument_id === inst.id);
       if (arg) {
-        info.innerHTML = `
-          <div><strong>${arg.argument_id}</strong></div>
-          <div class="meta">Class: ${formatTypeLabel(arg.arg_type || "")}</div>
-          <div><strong>Label</strong></div>
-          <div class="meta">${arg.text || "-"}</div>
-          <div><strong>Description</strong></div>
-          <div class="meta">${arg.description || "-"}</div>
-          <details>
-            <summary class="meta">Last updated</summary>
-            <div class="meta">${selected.updated_at || selected.annotation?.updated_at || "-"}</div>
-          </details>
-          <details>
-            <summary class="meta">Annotator</summary>
-            <div class="meta">${selected.metadata?.annotator || "-"}</div>
-          </details>
+        const fields = [
+          { label: "Class", value: formatTypeLabel(arg.arg_type || "") },
+          { label: "Label", value: arg.text || "-" },
+          { label: "Description", value: arg.description || "-" },
+          {
+            label: "Concept refs",
+            value: Array.isArray(arg.concept_refs) && arg.concept_refs.length
+              ? arg.concept_refs.join(", ")
+              : "",
+          },
+          {
+            label: "Source refs",
+            value: Array.isArray(arg.source_refs) && arg.source_refs.length
+              ? arg.source_refs.map((ref) => ref.section || "Section").join(", ")
+              : "",
+          },
+        ];
+
+        const header = document.createElement("div");
+        header.innerHTML = `<strong>${arg.argument_id}</strong>`;
+        info.appendChild(header);
+
+        fields.forEach((field) => {
+          if (!field.value) return;
+          const label = document.createElement("div");
+          label.innerHTML = `<strong>${field.label}</strong>`;
+          const value = document.createElement("div");
+          value.className = "meta";
+          value.textContent = field.value;
+          info.appendChild(label);
+          info.appendChild(value);
+        });
+
+        const updated = document.createElement("details");
+        updated.innerHTML = `
+          <summary class="meta">Last updated</summary>
+          <div class="meta">${selected.updated_at || selected.annotation?.updated_at || "-"}</div>
         `;
+        const annotator = document.createElement("details");
+        annotator.innerHTML = `
+          <summary class="meta">Annotator</summary>
+          <div class="meta">${selected.metadata?.annotator || "-"}</div>
+        `;
+        info.appendChild(updated);
+        info.appendChild(annotator);
       }
     } else if (inst.kind === "concept") {
       const concept = (selected.concepts || []).find((c) => c.concept_id === inst.id);
       if (concept) {
-        info.innerHTML = `
-          <div><strong>${concept.concept_id}</strong></div>
-          <div class="meta">Class: ${concept.type || "-"}</div>
-          <div><strong>Label</strong></div>
-          <div class="meta">${concept.label || "-"}</div>
-          <div><strong>Description</strong></div>
-          <div class="meta">-</div>
-          <details>
-            <summary class="meta">Last updated</summary>
-            <div class="meta">${selected.updated_at || selected.annotation?.updated_at || "-"}</div>
-          </details>
-          <details>
-            <summary class="meta">Annotator</summary>
-            <div class="meta">${selected.metadata?.annotator || "-"}</div>
-          </details>
+        const fields = [
+          { label: "Class", value: concept.type || "-" },
+          { label: "Label", value: concept.label || "-" },
+          {
+            label: "Aliases",
+            value: Array.isArray(concept.aliases) && concept.aliases.length
+              ? concept.aliases.join(", ")
+              : "",
+          },
+          {
+            label: "Source refs",
+            value: Array.isArray(concept.source_refs) && concept.source_refs.length
+              ? concept.source_refs.map((ref) => ref.section || "Section").join(", ")
+              : "",
+          },
+        ];
+
+        const header = document.createElement("div");
+        header.innerHTML = `<strong>${concept.concept_id}</strong>`;
+        info.appendChild(header);
+
+        fields.forEach((field) => {
+          if (!field.value) return;
+          const label = document.createElement("div");
+          label.innerHTML = `<strong>${field.label}</strong>`;
+          const value = document.createElement("div");
+          value.className = "meta";
+          value.textContent = field.value;
+          info.appendChild(label);
+          info.appendChild(value);
+        });
+
+        const updated = document.createElement("details");
+        updated.innerHTML = `
+          <summary class="meta">Last updated</summary>
+          <div class="meta">${selected.updated_at || selected.annotation?.updated_at || "-"}</div>
         `;
+        const annotator = document.createElement("details");
+        annotator.innerHTML = `
+          <summary class="meta">Annotator</summary>
+          <div class="meta">${selected.metadata?.annotator || "-"}</div>
+        `;
+        info.appendChild(updated);
+        info.appendChild(annotator);
       }
     }
     if (!info.innerHTML) {
