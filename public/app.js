@@ -54,6 +54,13 @@ const state = {
 };
 
 const el = (id) => document.getElementById(id);
+const BASE_PATH = document.querySelector("base")?.getAttribute("href") || "/";
+
+function withBase(path) {
+  const base = (BASE_PATH || "/").replace(/\/$/, "");
+  const clean = path.startsWith("/") ? path : `/${path}`;
+  return `${base}${clean}` || clean;
+}
 
 function setHint(message) {
   el("highlightHint").textContent = message || "";
@@ -92,7 +99,7 @@ async function requestNormalization(text) {
   const toast = showToast("Generating canonical statement...", "loading", { persist: true });
 
   try {
-    const res = await fetch("/api/normalize", {
+    const res = await fetch(withBase("/api/normalize"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
@@ -608,7 +615,7 @@ function buildTable(tableNode) {
     wrap.className = "tei-table-wrap";
     const badge = document.createElement("img");
     badge.className = "tei-table-badge";
-    badge.src = "/assets/icon.png";
+    badge.src = withBase("/assets/idea_graph_figure.svg");
     badge.alt = "Table";
     const pre = document.createElement("div");
     pre.className = "tei-figure-desc";
@@ -622,7 +629,7 @@ function buildTable(tableNode) {
   wrap.className = "tei-table-wrap";
   const badge = document.createElement("img");
   badge.className = "tei-table-badge";
-  badge.src = "/assets/icon.png";
+  badge.src = withBase("/assets/idea_graph_figure.svg");
   badge.alt = "Table";
 
   const table = document.createElement("table");
@@ -1023,7 +1030,7 @@ async function uploadPdf() {
 
   setHint("");
   const loadingToast = showToast("Parsing PDF with Grobid...", "loading", { persist: true });
-  const res = await fetch("/api/upload", { method: "POST", body: form });
+  const res = await fetch(withBase("/api/upload"), { method: "POST", body: form });
   if (!res.ok) {
     if (loadingToast) loadingToast.remove();
     showToast("Upload failed.", "error");
@@ -1091,7 +1098,7 @@ async function submitAnnotations() {
   };
 
   const savingToast = showToast("Saving annotations...", "loading", { persist: true });
-  const res = await fetch(`/api/annotation/${state.paperId}`, {
+  const res = await fetch(withBase(`/api/annotation/${state.paperId}`), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

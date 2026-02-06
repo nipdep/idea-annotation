@@ -162,9 +162,6 @@ textarea.loading {
   gap: 18px;
   height: calc(100vh - 120px);
   min-height: 0;
-  padding: 6px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.45);
 }
 
 .scrollable {

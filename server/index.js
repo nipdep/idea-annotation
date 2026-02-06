@@ -14,9 +14,9 @@ const GROBID_URL = process.env.GROBID_URL || "http://localhost:8070";
 const LLM_URL = process.env.LLM_URL || "http://localhost:1234/v1/x";
 const LLM_MODEL = process.env.LLM_MODEL || "";
 const LLM_MODE = process.env.LLM_MODE || "chat";
+const BASE_PATH = (process.env.BASE_PATH || "/").replace(/\/?$/, "/");
 
 app.use(express.json({ limit: "10mb" }));
-app.use(express.static(path.join(__dirname, "..", "public")));
 
 const upload = multer({ dest: TMP_DIR });
 
@@ -26,6 +26,18 @@ function ensureDir(dir) {
 
 ensureDir(TMP_DIR);
 ensureDir(DATASET_DIR);
+
+function renderIndex(res) {
+  const indexPath = path.join(__dirname, "..", "public", "index.html");
+  let html = fs.readFileSync(indexPath, "utf8");
+  html = html.replace("{{BASE_PATH}}", BASE_PATH);
+  res.type("html").send(html);
+}
+
+app.get("/", (req, res) => renderIndex(res));
+app.get("/index.html", (req, res) => renderIndex(res));
+
+app.use(express.static(path.join(__dirname, "..", "public")));
 
 function paperPath(paperId, ext) {
   return path.join(DATASET_DIR, `${paperId}.${ext}`);
