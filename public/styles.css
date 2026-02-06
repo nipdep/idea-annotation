@@ -50,7 +50,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 24px 40px 12px;
+  padding: 16px 32px 8px;
   gap: 24px;
 }
 
@@ -61,8 +61,8 @@ body {
 }
 
 .app-logo {
-  width: 68px;
-  height: 68px;
+  width: 58px;
+  height: 58px;
 }
 
 .app-title {
@@ -111,6 +111,7 @@ body {
   padding: 12px 32px 24px;
   color: var(--muted);
   font-size: 0.85rem;
+  text-align: center;
 }
 
 .upload-bar {
@@ -523,6 +524,10 @@ mark.used {
   color: #c0482e;
   font-weight: 700;
   margin-left: 4px;
+}
+
+.required.tight {
+  margin-left: 0;
 }
 
 .list-block {
