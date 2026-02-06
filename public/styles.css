@@ -213,9 +213,20 @@ body {
   stroke-width: 1.5;
 }
 
+.graph-node.empty {
+  fill: #f1efeb;
+  stroke: #d0c6bd;
+}
+
 .graph-label {
   font-size: 12px;
   fill: var(--ink);
+}
+
+.graph-edge-label {
+  font-size: 10px;
+  fill: #6b6157;
+  background: #fff;
 }
 
 .upload-bar {

@@ -57,6 +57,8 @@ const state = {
     selectedId: null,
     view: "table",
     loaded: false,
+    expanded: new Set(),
+    selectedInstance: null,
   },
 };
 
@@ -354,6 +356,7 @@ function renderLibraryGraph() {
   const svg = el("graphSvg");
   if (!svg) return;
   svg.innerHTML = "";
+  svg.setAttribute("viewBox", "0 0 800 420");
 
   const items = state.library.filtered || [];
   const count = items.length;
@@ -422,6 +425,42 @@ function renderLibraryGraph() {
   });
 }
 
+function buildArgumentGroups(item) {
+  const groups = {
+    Argument: [],
+    Idea: [],
+    Issue: [],
+    Backing: [],
+    Approach: [],
+    Evidence: [],
+    Claim: [],
+    Warrant: [],
+    Assumption: [],
+    Artifact: [],
+  };
+
+  (item.arguments || []).forEach((arg) => {
+    const type = normalizeArgType(arg.arg_type);
+    const entry = { kind: "argument", id: arg.argument_id, label: arg.argument_id, data: arg };
+    if (type === "idea") groups.Idea.push(entry);
+    else if (type === "issue") groups.Issue.push(entry);
+    else if (type === "backing") groups.Backing.push(entry);
+    else if (type === "approach") groups.Approach.push(entry);
+    else if (type === "claim" || type === "central argument") groups.Claim.push(entry);
+    else if (type === "warrant") groups.Warrant.push(entry);
+    else if (type === "evidence" || type === "result" || type.startsWith("experiment")) groups.Evidence.push(entry);
+  });
+
+  (item.concepts || []).forEach((concept) => {
+    const type = String(concept.type || "").toLowerCase();
+    const entry = { kind: "concept", id: concept.concept_id, label: concept.concept_id, data: concept };
+    if (type.includes("assumption")) groups.Assumption.push(entry);
+    if (type.includes("artifact")) groups.Artifact.push(entry);
+  });
+
+  return groups;
+}
+
 function renderPaperFocusedGraph(svg, item) {
   const width = 800;
   const height = 520;
@@ -457,76 +496,74 @@ function renderPaperFocusedGraph(svg, item) {
   hint.textContent = "Click background to return to paper graph";
   svg.appendChild(hint);
 
-  const center = { x: width / 2, y: 90 };
-  drawNode(svg, center.x, center.y, "Paper", "graph-node paper-node");
+  const groups = buildArgumentGroups(item);
 
-  const argTypes = (item.arguments || []).map((arg) => normalizeArgType(arg.arg_type));
-  const argCounts = argTypes.reduce((acc, type) => {
-    if (!type) return acc;
-    acc[type] = (acc[type] || 0) + 1;
-    return acc;
-  }, {});
-
-  const chainOrder = ["issue", "idea", "approach", "experiment", "claim"];
-  const chain = chainOrder.filter((type) => argCounts[type]);
-  const chainY = 220;
-  const spacing = chain.length > 1 ? 140 : 0;
-  const startX = width / 2 - (spacing * (chain.length - 1)) / 2;
-
-  const chainPositions = chain.map((type, idx) => ({
-    type,
-    x: startX + idx * spacing,
-    y: chainY,
-  }));
-
-  chainPositions.forEach((node, idx) => {
-    drawNode(svg, node.x, node.y, formatTypeLabel(node.type), "graph-node");
-    drawEdge(svg, center.x, center.y + 18, node.x, node.y - 18);
-    if (idx > 0) {
-      drawEdge(svg, chainPositions[idx - 1].x, chainPositions[idx - 1].y, node.x, node.y);
-    }
-  });
-
-  const extrasOrder = [
-    "backing",
-    "warrant",
-    "evidence",
-    "result",
-    "hypothesis",
-    "goal",
-    "experiment design",
-    "experiment goal",
-    "experiment hypothesis",
-    "experiment result",
-    "central argument",
+  const paperNode = { id: "Work", label: "Work", x: 400, y: 80 };
+  const argumentNode = { id: "Argument", label: "Argument", x: 400, y: 160 };
+  const nodes = [
+    { id: "Issue", label: "Issue", x: 170, y: 260 },
+    { id: "Idea", label: "Idea", x: 630, y: 260 },
+    { id: "Approach", label: "Approach", x: 400, y: 260 },
+    { id: "Backing", label: "Backing", x: 60, y: 340 },
+    { id: "Evidence", label: "Evidence", x: 340, y: 360 },
+    { id: "Claim", label: "Claim", x: 640, y: 360 },
+    { id: "Warrant", label: "Warrant", x: 520, y: 360 },
+    { id: "Assumption", label: "Assumption", x: 440, y: 440 },
+    { id: "Artifact", label: "Artifact", x: 280, y: 440 },
   ];
-  const extras = extrasOrder.filter((type) => argCounts[type]);
-  const extrasY = 360;
-  const extraSpacing = extras.length > 1 ? 120 : 0;
-  const extraStartX = width / 2 - (extraSpacing * (extras.length - 1)) / 2;
 
-  extras.forEach((type, idx) => {
-    const x = extraStartX + idx * extraSpacing;
-    drawNode(svg, x, extrasY, formatTypeLabel(type), "graph-node small-node");
-    const anchor = chainPositions[chainPositions.length - 1] || { x: center.x, y: center.y };
-    drawEdge(svg, anchor.x, anchor.y, x, extrasY - 18);
+  drawNode(svg, paperNode.x, paperNode.y, paperNode.label, "graph-node paper-node");
+  drawNode(svg, argumentNode.x, argumentNode.y, argumentNode.label, "graph-node");
+  drawEdge(svg, paperNode.x, paperNode.y + 18, argumentNode.x, argumentNode.y - 18, "contains");
+
+  const edges = [
+    { from: argumentNode, to: nodes.find((n) => n.id === "Idea"), label: "proposesIdea" },
+    { from: argumentNode, to: nodes.find((n) => n.id === "Issue"), label: "concernsIssue" },
+    { from: nodes.find((n) => n.id === "Idea"), to: nodes.find((n) => n.id === "Issue"), label: "responseTo" },
+    { from: argumentNode, to: nodes.find((n) => n.id === "Backing"), label: "hasBacking" },
+    { from: argumentNode, to: nodes.find((n) => n.id === "Approach"), label: "realizes" },
+    { from: argumentNode, to: nodes.find((n) => n.id === "Evidence"), label: "hasEvidence" },
+    { from: nodes.find((n) => n.id === "Approach"), to: nodes.find((n) => n.id === "Evidence"), label: "generates" },
+    { from: argumentNode, to: nodes.find((n) => n.id === "Claim"), label: "hasClaim" },
+    { from: nodes.find((n) => n.id === "Evidence"), to: nodes.find((n) => n.id === "Claim"), label: "proves" },
+    { from: argumentNode, to: nodes.find((n) => n.id === "Warrant"), label: "hasWarrant" },
+    { from: nodes.find((n) => n.id === "Warrant"), to: nodes.find((n) => n.id === "Claim"), label: "leadTo" },
+    { from: nodes.find((n) => n.id === "Approach"), to: nodes.find((n) => n.id === "Assumption"), label: "hasAssumption" },
+    { from: nodes.find((n) => n.id === "Approach"), to: nodes.find((n) => n.id === "Artifact"), label: "uses" },
+    { from: nodes.find((n) => n.id === "Approach"), to: nodes.find((n) => n.id === "Artifact"), label: "introduce" },
+  ];
+
+  nodes.forEach((node) => {
+    const hasInstances = (groups[node.id] || []).length > 0;
+    const className = `graph-node${hasInstances ? "" : " empty"}${state.library.expanded.has(node.id) ? " active" : ""}`;
+    drawNode(svg, node.x, node.y, node.label, className, () => toggleGraphGroup(node.id));
   });
 
-  const conceptCount = (item.concepts || []).length;
-  if (conceptCount) {
-    const conceptNodeY = 460;
-    drawNode(svg, width / 2, conceptNodeY, `Concepts (${conceptCount})`, "graph-node small-node");
-    drawEdge(svg, center.x, center.y + 20, width / 2, conceptNodeY - 18);
-  }
+  edges.forEach((edge) => {
+    if (!edge.from || !edge.to) return;
+    drawEdge(svg, edge.from.x, edge.from.y, edge.to.x, edge.to.y, edge.label);
+  });
+
+  nodes.forEach((node) => {
+    if (!state.library.expanded.has(node.id)) return;
+    const instances = groups[node.id] || [];
+    renderInstanceNodes(svg, node, instances);
+  });
 }
 
-function drawNode(svg, x, y, label, className) {
+function drawNode(svg, x, y, label, className, onClick) {
   const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
   const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
   circle.setAttribute("cx", x);
   circle.setAttribute("cy", y);
   circle.setAttribute("r", className.includes("small-node") ? "16" : "20");
   circle.setAttribute("class", className);
+  if (onClick) {
+    circle.addEventListener("click", (event) => {
+      event.stopPropagation();
+      onClick();
+    });
+  }
 
   const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
   text.setAttribute("x", x);
@@ -540,7 +577,7 @@ function drawNode(svg, x, y, label, className) {
   svg.appendChild(group);
 }
 
-function drawEdge(svg, x1, y1, x2, y2) {
+function drawEdge(svg, x1, y1, x2, y2, label) {
   const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
   line.setAttribute("x1", x1);
   line.setAttribute("y1", y1);
@@ -549,6 +586,46 @@ function drawEdge(svg, x1, y1, x2, y2) {
   line.setAttribute("stroke", "#d0c6bd");
   line.setAttribute("stroke-width", "1.2");
   svg.appendChild(line);
+
+  if (label) {
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.setAttribute("x", (x1 + x2) / 2);
+    text.setAttribute("y", (y1 + y2) / 2 - 6);
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("class", "graph-edge-label");
+    text.textContent = label;
+    svg.appendChild(text);
+  }
+}
+
+function toggleGraphGroup(groupId) {
+  if (state.library.expanded.has(groupId)) {
+    state.library.expanded.delete(groupId);
+  } else {
+    state.library.expanded.add(groupId);
+  }
+  renderLibraryGraph();
+}
+
+function renderInstanceNodes(svg, parentNode, instances) {
+  if (!instances.length) return;
+  const radius = 45;
+  instances.forEach((inst, idx) => {
+    const angle = (2 * Math.PI * idx) / instances.length;
+    const x = parentNode.x + radius * Math.cos(angle);
+    const y = parentNode.y + radius * Math.sin(angle);
+    const isSelected =
+      state.library.selectedInstance?.id === inst.id &&
+      state.library.selectedInstance?.kind === inst.kind;
+
+    const nodeClass = `graph-node small-node${isSelected ? " active" : ""}`;
+    drawNode(svg, x, y, inst.label, nodeClass, () => {
+      state.library.selectedInstance = { kind: inst.kind, id: inst.id };
+      renderLibraryDetail();
+      renderLibraryGraph();
+    });
+    drawEdge(svg, parentNode.x, parentNode.y, x, y);
+  });
 }
 
 function renderLibraryDetail() {
@@ -573,6 +650,41 @@ function renderLibraryDetail() {
     <div class="meta">DOI: ${metadata.doi || "-"}</div>
   `;
   container.appendChild(details);
+
+  if (state.library.selectedInstance) {
+    const inst = state.library.selectedInstance;
+    const block = document.createElement("div");
+    block.className = "list-block";
+    block.innerHTML = `<div class="subhead">Selected Node</div>`;
+    const info = document.createElement("div");
+    info.className = "list-item";
+    if (inst.kind === "argument") {
+      const arg = (selected.arguments || []).find((a) => a.argument_id === inst.id);
+      if (arg) {
+        info.innerHTML = `
+          <div>
+            <div><strong>${arg.argument_id}</strong> ${formatTypeLabel(arg.arg_type || "")}</div>
+            <div class="meta">${arg.text || ""}</div>
+          </div>
+        `;
+      }
+    } else if (inst.kind === "concept") {
+      const concept = (selected.concepts || []).find((c) => c.concept_id === inst.id);
+      if (concept) {
+        info.innerHTML = `
+          <div>
+            <div><strong>${concept.concept_id}</strong> ${concept.label || ""}</div>
+            <div class="meta">${concept.type || ""}</div>
+          </div>
+        `;
+      }
+    }
+    if (!info.innerHTML) {
+      info.textContent = "Details unavailable.";
+    }
+    block.appendChild(info);
+    container.appendChild(block);
+  }
 
   const conceptBlock = document.createElement("div");
   conceptBlock.className = "list-block";
@@ -621,6 +733,8 @@ function renderLibraryDetail() {
 
 function selectLibraryItem(paperId) {
   state.library.selectedId = paperId;
+  state.library.expanded = new Set();
+  state.library.selectedInstance = null;
   renderLibraryTable();
   renderLibraryGraph();
   renderLibraryDetail();
