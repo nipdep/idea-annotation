@@ -326,7 +326,7 @@ textarea[readonly] {
 
 .app-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 2.2fr) minmax(0, 1.2fr);
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 2.6fr) minmax(0, 1.05fr);
   gap: 18px;
   padding: 12px 32px 32px;
 }
@@ -450,7 +450,8 @@ textarea[readonly] {
 }
 
 .doc-panel {
-  min-height: 70vh;
+  min-height: 0;
+  height: calc(100vh - 120px);
   min-width: 0;
 }
 
@@ -465,7 +466,9 @@ textarea[readonly] {
   overflow-y: auto;
   overflow-x: auto;
   padding-right: 6px;
-  max-height: calc(70vh - 80px);
+  flex: 1;
+  max-height: none;
+  min-height: 0;
 }
 .tei-doc {
   background: #fff;
@@ -735,12 +738,12 @@ mark.used {
 }
 
 .highlight-pill {
-  position: relative;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px 34px 12px 14px;
-  border-radius: 10px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 8px;
+  padding: 12px 12px 12px 14px;
+  border-radius: 12px;
   background: #f4efe8;
   border: 1px solid var(--border);
   margin-bottom: 10px;
@@ -755,6 +758,8 @@ mark.used {
   white-space: normal;
   word-break: break-word;
   flex: 1;
+  grid-column: 1 / -1;
+  grid-row: 2;
 }
 
 .highlight-pill.selected {
@@ -763,22 +768,47 @@ mark.used {
 }
 
 .highlight-pill-close {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 20px;
-  height: 20px;
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  align-self: start;
+  width: 18px;
+  height: 18px;
   border-radius: 6px;
-  border: none;
-  background: #efe6dd;
+  border: 1px solid rgba(106, 92, 79, 0.35);
+  background: transparent;
   color: #6a5c4f;
-  font-size: 14px;
-  line-height: 1;
   cursor: pointer;
+  position: relative;
+}
+
+.highlight-pill-close::before,
+.highlight-pill-close::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 1.5px;
+  background: currentColor;
+  transform-origin: center;
+}
+
+.highlight-pill-close::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.highlight-pill-close::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
 }
 
 .highlight-pill-close:hover {
-  background: #e2d6c8;
+  border-color: rgba(106, 92, 79, 0.6);
+}
+
+.highlight-pill.selected .highlight-pill-close {
+  color: #2f5f41;
+  border-color: rgba(47, 95, 65, 0.5);
 }
 
 .ref-pill {

@@ -1671,7 +1671,8 @@ function renderHighlightPickers() {
       const close = document.createElement("button");
       close.type = "button";
       close.className = "highlight-pill-close";
-      close.innerHTML = "&times;";
+      close.setAttribute("aria-label", "Remove highlight");
+      close.title = "Remove highlight";
       close.addEventListener("click", (event) => {
         event.stopPropagation();
         removeHighlight(hl.id);
