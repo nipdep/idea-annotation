@@ -98,7 +98,8 @@ function showToast(message, type = "info", options = {}) {
 }
 
 function updateDescription(kind) {
-  const textarea = el(kind === "concept" ? "conceptDescription" : "argumentDescription");
+  if (kind !== "argument") return;
+  const textarea = el("argumentDescription");
   if (!textarea) return;
   const ids = Array.from(state.highlightSelection[kind]);
   const texts = state.highlights
@@ -1034,7 +1035,6 @@ function removeHighlight(id) {
   state.highlights = state.highlights.filter((h) => h.id !== id);
   state.highlightSelection.concept.delete(id);
   state.highlightSelection.argument.delete(id);
-  updateDescription("concept");
   updateDescription("argument");
 }
 
@@ -1048,7 +1048,6 @@ function consumeHighlights(ids) {
     const mark = document.querySelector(`mark[data-hid="${id}"]`);
     if (mark) mark.classList.add("used");
   });
-  updateDescription("concept");
   updateDescription("argument");
 }
 
@@ -1208,7 +1207,6 @@ function addHighlight() {
     state.highlightSelection.argument.add(id);
     state.highlightSelection.concept.add(id);
     updateDescription("argument");
-    updateDescription("concept");
 
     const activeTab = document.querySelector(".tab.active")?.dataset.tab;
     if (activeTab === "argument") {
@@ -1262,7 +1260,6 @@ function createConcept() {
   consumeHighlights(Array.from(state.highlightSelection.concept));
   el("conceptLabel").value = "";
   el("conceptAliases").value = "";
-  el("conceptDescription").value = "";
   state.conceptTypePath = [];
   renderConceptTypePicker();
   renderConceptTypePath();
@@ -1360,7 +1357,6 @@ async function uploadPdf() {
   renderConceptTypePicker();
   renderConceptTypePath();
   renderFlowGuide();
-  updateDescription("concept");
   updateDescription("argument");
   if (loadingToast) loadingToast.remove();
   if (data.existing) {
@@ -1457,7 +1453,6 @@ function init() {
   renderConceptTypePicker();
   renderConceptTypePath();
   renderFlowGuide();
-  updateDescription("concept");
   updateDescription("argument");
   wireTabs();
   wireNavigation();
