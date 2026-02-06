@@ -332,6 +332,52 @@ Return only the canonical sentence.`;
   }
 });
 
+app.get("/api/papers", (req, res) => {
+  try {
+    const index = loadIndex();
+    const items = [];
+
+    const hashes = Object.keys(index.items || {});
+    if (hashes.length === 0) {
+      const files = fs.readdirSync(DATASET_DIR);
+      files
+        .filter((file) => file.endsWith(".tei.xml"))
+        .forEach((file) => {
+          const paperId = file.replace(".tei.xml", "");
+          const loaded = loadPaper(paperId);
+          if (!loaded) return;
+          items.push({
+            paper_id: paperId,
+            pdf_hash: "",
+            metadata: loaded.metadata,
+            concepts: loaded.annotation?.concepts || [],
+            arguments: loaded.annotation?.arguments || [],
+            updated_at: loaded.annotation?.updated_at || "",
+          });
+        });
+    } else {
+      hashes.forEach((hash) => {
+        const entry = index.items[hash];
+        if (!entry?.paper_id) return;
+        const loaded = loadPaper(entry.paper_id);
+        if (!loaded) return;
+        items.push({
+          paper_id: entry.paper_id,
+          pdf_hash: hash,
+          metadata: loaded.metadata,
+          concepts: loaded.annotation?.concepts || [],
+          arguments: loaded.annotation?.arguments || [],
+          updated_at: loaded.annotation?.updated_at || entry.uploaded_at || "",
+        });
+      });
+    }
+
+    res.json({ items });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/annotation/:id", (req, res) => {
   try {
     const jsonPath = paperPath(req.params.id, "json");

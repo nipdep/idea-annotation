@@ -52,6 +52,13 @@ const state = {
     argument: new Set(),
   },
   conceptTypePath: [],
+  library: {
+    items: [],
+    filtered: [],
+    selectedId: null,
+    view: "table",
+    loaded: false,
+  },
 };
 
 const el = (id) => document.getElementById(id);
@@ -244,6 +251,262 @@ function renderFlowGuide() {
     item.appendChild(label);
     item.appendChild(badge);
     container.appendChild(item);
+  });
+}
+
+function flattenAuthors(authors) {
+  if (!authors) return "";
+  if (Array.isArray(authors)) return authors.join(" ");
+  return String(authors);
+}
+
+function librarySearchText(item) {
+  const metadata = item.metadata || {};
+  const conceptLabels = (item.concepts || []).map((c) => c.label || "").join(" ");
+  const argumentTexts = (item.arguments || []).map((a) => a.text || "").join(" ");
+  return [
+    metadata.title || "",
+    flattenAuthors(metadata.authors),
+    metadata.doi || "",
+    metadata.venue || "",
+    metadata.year || "",
+    conceptLabels,
+    argumentTexts,
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+function applyLibraryFilter(query) {
+  const q = (query || "").trim().toLowerCase();
+  const items = state.library.items || [];
+  state.library.filtered = q
+    ? items.filter((item) => librarySearchText(item).includes(q))
+    : items.slice();
+
+  if (
+    state.library.selectedId &&
+    !state.library.filtered.find((item) => item.paper_id === state.library.selectedId)
+  ) {
+    state.library.selectedId = null;
+  }
+
+  renderLibraryTable();
+  renderLibraryGraph();
+  renderLibraryDetail();
+}
+
+function renderLibraryTable() {
+  const tbody = el("libraryTableBody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  if (!state.library.filtered.length) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 5;
+    cell.className = "muted";
+    cell.textContent = "No papers found.";
+    row.appendChild(cell);
+    tbody.appendChild(row);
+    return;
+  }
+
+  state.library.filtered.forEach((item) => {
+    const row = document.createElement("tr");
+    if (state.library.selectedId === item.paper_id) row.classList.add("active");
+
+    const title = item.metadata?.title || "Untitled";
+    const year = item.metadata?.year || "-";
+    const venue = item.metadata?.venue || "-";
+    const conceptCount = item.concepts?.length || 0;
+    const argumentCount = item.arguments?.length || 0;
+
+    row.innerHTML = `
+      <td>${title}</td>
+      <td>${year}</td>
+      <td>${venue}</td>
+      <td>${conceptCount}</td>
+      <td>${argumentCount}</td>
+    `;
+    row.addEventListener("click", () => selectLibraryItem(item.paper_id));
+    tbody.appendChild(row);
+  });
+}
+
+function renderLibraryGraph() {
+  const svg = el("graphSvg");
+  if (!svg) return;
+  svg.innerHTML = "";
+
+  const items = state.library.filtered || [];
+  const count = items.length;
+  if (count === 0) {
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.setAttribute("x", "20");
+    text.setAttribute("y", "40");
+    text.setAttribute("fill", "#6b6157");
+    text.textContent = "No papers found.";
+    svg.appendChild(text);
+    return;
+  }
+
+  const width = 800;
+  const height = 420;
+  const cx = width / 2;
+  const cy = height / 2;
+  const radius = Math.min(width, height) / 2 - 60;
+
+  const positions = items.map((item, idx) => {
+    const angle = (2 * Math.PI * idx) / count;
+    return {
+      id: item.paper_id,
+      x: cx + radius * Math.cos(angle),
+      y: cy + radius * Math.sin(angle),
+      label: (item.metadata?.title || "Untitled").slice(0, 18),
+    };
+  });
+
+  for (let i = 0; i < positions.length - 1; i += 1) {
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", positions[i].x);
+    line.setAttribute("y1", positions[i].y);
+    line.setAttribute("x2", positions[i + 1].x);
+    line.setAttribute("y2", positions[i + 1].y);
+    line.setAttribute("stroke", "#d0c6bd");
+    line.setAttribute("stroke-width", "1");
+    svg.appendChild(line);
+  }
+
+  positions.forEach((pos) => {
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("cx", pos.x);
+    circle.setAttribute("cy", pos.y);
+    circle.setAttribute("r", "18");
+    circle.classList.add("graph-node");
+    if (state.library.selectedId === pos.id) circle.classList.add("active");
+    circle.addEventListener("click", () => selectLibraryItem(pos.id));
+
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    label.setAttribute("x", pos.x);
+    label.setAttribute("y", pos.y + 32);
+    label.setAttribute("text-anchor", "middle");
+    label.classList.add("graph-label");
+    label.textContent = pos.label;
+
+    group.appendChild(circle);
+    group.appendChild(label);
+    svg.appendChild(group);
+  });
+}
+
+function renderLibraryDetail() {
+  const container = el("libraryDetailBody");
+  if (!container) return;
+  container.innerHTML = "";
+
+  const selected = state.library.filtered.find((item) => item.paper_id === state.library.selectedId);
+  if (!selected) {
+    container.innerHTML = '<div class="muted">Select a paper to view details.</div>';
+    return;
+  }
+
+  const metadata = selected.metadata || {};
+  const details = document.createElement("div");
+  details.className = "stack";
+  details.innerHTML = `
+    <div><strong>${metadata.title || "Untitled"}</strong></div>
+    <div class="meta">${flattenAuthors(metadata.authors) || "Unknown authors"}</div>
+    <div class="meta">Year: ${metadata.year || "-"}</div>
+    <div class="meta">Venue: ${metadata.venue || "-"}</div>
+    <div class="meta">DOI: ${metadata.doi || "-"}</div>
+  `;
+  container.appendChild(details);
+
+  const conceptBlock = document.createElement("div");
+  conceptBlock.className = "list-block";
+  conceptBlock.innerHTML = `<div class="subhead">Concepts</div>`;
+  const conceptList = document.createElement("div");
+  conceptList.className = "list";
+  (selected.concepts || []).forEach((concept) => {
+    const item = document.createElement("div");
+    item.className = "list-item";
+    item.innerHTML = `
+      <div>
+        <div><strong>${concept.concept_id}</strong> ${concept.label || ""}</div>
+        <div class="meta">${concept.type || ""}</div>
+      </div>
+    `;
+    conceptList.appendChild(item);
+  });
+  if (!selected.concepts?.length) {
+    conceptList.innerHTML = '<div class="muted">No concepts recorded.</div>';
+  }
+  conceptBlock.appendChild(conceptList);
+  container.appendChild(conceptBlock);
+
+  const argumentBlock = document.createElement("div");
+  argumentBlock.className = "list-block";
+  argumentBlock.innerHTML = `<div class="subhead">Arguments</div>`;
+  const argumentList = document.createElement("div");
+  argumentList.className = "list";
+  (selected.arguments || []).forEach((argument) => {
+    const item = document.createElement("div");
+    item.className = "list-item";
+    item.innerHTML = `
+      <div>
+        <div><strong>${argument.argument_id}</strong> ${formatTypeLabel(argument.arg_type || "")}</div>
+        <div class="meta">${argument.text ? argument.text.slice(0, 120) : ""}</div>
+      </div>
+    `;
+    argumentList.appendChild(item);
+  });
+  if (!selected.arguments?.length) {
+    argumentList.innerHTML = '<div class="muted">No arguments recorded.</div>';
+  }
+  argumentBlock.appendChild(argumentList);
+  container.appendChild(argumentBlock);
+}
+
+function selectLibraryItem(paperId) {
+  state.library.selectedId = paperId;
+  renderLibraryTable();
+  renderLibraryGraph();
+  renderLibraryDetail();
+}
+
+async function fetchLibrary() {
+  const res = await fetch(withBase("/api/papers"));
+  if (!res.ok) {
+    showToast("Failed to load paper library.", "error");
+    return;
+  }
+  const data = await res.json();
+  state.library.items = data.items || [];
+  state.library.loaded = true;
+  applyLibraryFilter(el("librarySearch")?.value || "");
+}
+
+function wireLibraryControls() {
+  const searchInput = el("librarySearch");
+  if (searchInput) {
+    searchInput.addEventListener("input", (e) => applyLibraryFilter(e.target.value));
+  }
+
+  document.querySelectorAll(".view-toggle .toggle").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".view-toggle .toggle").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      state.library.view = btn.dataset.view;
+      document.querySelectorAll(".library-view").forEach((view) => view.classList.remove("active"));
+      if (state.library.view === "graph") {
+        el("libraryGraphView")?.classList.add("active");
+      } else {
+        el("libraryTableView")?.classList.add("active");
+      }
+      renderLibraryGraph();
+    });
   });
 }
 
@@ -1138,6 +1401,9 @@ function wireNavigation() {
       button.classList.add("active");
       const target = document.getElementById(button.dataset.page);
       if (target) target.classList.add("active");
+      if (button.dataset.page === "libraryPage" && !state.library.loaded) {
+        fetchLibrary();
+      }
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
   });
@@ -1157,6 +1423,7 @@ function init() {
   renderFlowGuide();
   wireTabs();
   wireNavigation();
+  wireLibraryControls();
 
   el("paperInfo").textContent = "Files will save under dataset/papers/";
 
