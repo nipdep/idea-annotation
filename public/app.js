@@ -508,10 +508,10 @@ function renderPaperFocusedGraph(svg, item) {
     instances.forEach((inst, idx) => {
       const parent = nodes.find((n) => n.id === node.id);
       const baseAngle = parent?.fy && parent.fy > height * 0.7 ? -Math.PI / 2 : Math.PI / 2;
-      const spread = Math.PI;
+      const spread = Math.PI / 2;
       const angle =
         baseAngle + (spread * (idx - (instances.length - 1) / 2)) / Math.max(instances.length, 1);
-      const radius = 48;
+      const radius = 28;
       nodes.push({
         id: `${node.id}:${inst.id}`,
         label: inst.label,
@@ -526,7 +526,7 @@ function renderPaperFocusedGraph(svg, item) {
         source: node.id,
         target: `${node.id}:${inst.id}`,
         label: "",
-        distance: 55 + idx * 2,
+        distance: 38,
       });
     });
   });
@@ -667,9 +667,13 @@ function renderPaperFocusedGraph(svg, item) {
       "link",
       window.d3.forceLink(links).id((d) => d.id).distance((d) => d.distance || 120)
     )
-    .force("charge", window.d3.forceManyBody().strength(-280))
+    .force(
+      "charge",
+      window.d3.forceManyBody().strength((d) => (d.type === "instance" ? -40 : -180))
+    )
+    .force("instance-link", window.d3.forceLink(links.filter((l) => l.label === "")).id((d) => d.id).distance(35).strength(0.9))
     .force("center", window.d3.forceCenter(width / 2, height / 2))
-    .force("collision", window.d3.forceCollide().radius((d) => d.r + 8))
+    .force("collision", window.d3.forceCollide().radius((d) => d.r + 6))
     .alpha(0.2)
     .alphaDecay(0.2)
     .on("tick", () => {
