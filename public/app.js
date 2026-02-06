@@ -43,6 +43,7 @@ const state = {
   metadata: {},
   metadataChecks: {},
   doc: null,
+  teiXml: "",
   annotations: { concepts: [], arguments: [], created_at: null },
   highlights: [],
   highlightSelection: {
@@ -334,6 +335,15 @@ function renderDoc() {
   const docView = el("docView");
   docView.innerHTML = "";
 
+  if (state.teiXml && window.CETEIcean) {
+    const cetei = new CETEIcean();
+    cetei.makeHTML5(state.teiXml, (data) => {
+      docView.innerHTML = "";
+      docView.appendChild(data);
+    });
+    return;
+  }
+
   if (!state.doc) {
     docView.innerHTML = '<p class="muted">Upload a paper to begin.</p>';
     return;
@@ -585,9 +595,17 @@ function addHighlight() {
     ? range.commonAncestorContainer
     : range.commonAncestorContainer.parentElement;
 
-  const paragraph = container.closest("p");
-  const section = container.closest(".section");
-  if (!paragraph || !section) {
+  const paragraph = container.closest("tei-p, p");
+  const sectionEl = container.closest("tei-div");
+  const sectionHead = sectionEl ? sectionEl.querySelector("tei-head") : null;
+  let sectionLabel = sectionHead?.textContent?.trim() || "";
+  if (!sectionLabel) {
+    if (container.closest("tei-abstract")) sectionLabel = "Abstract";
+    else if (container.closest("tei-titleStmt")) sectionLabel = "Header";
+    else sectionLabel = "Body";
+  }
+
+  if (!paragraph) {
     setHint("Select text inside the document body.");
     showToast("Select text inside the document content.", "error");
     return;
@@ -605,7 +623,7 @@ function addHighlight() {
     state.highlights.push({
       id,
       text,
-      section: section.dataset.section || "Unknown",
+      section: sectionLabel,
       page: "",
       used: false,
     });
@@ -731,6 +749,7 @@ async function uploadPdf() {
   state.paperId = data.paper_id;
   state.metadata = data.metadata || {};
   state.doc = data.doc;
+  state.teiXml = data.tei_xml || "";
   state.annotations = data.annotation || { concepts: [], arguments: [], created_at: null };
   state.metadataChecks = data.annotation?.metadata_checks || {};
   state.highlights = [];

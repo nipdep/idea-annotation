@@ -37,6 +37,8 @@ async function callGrobid(pdfPath) {
   const form = new FormData();
   form.append("input", fs.createReadStream(pdfPath));
   form.append("consolidateHeader", "1");
+  form.append("consolidateCitations", "1");
+  form.append("includeRawCitations", "1");
 
   const res = await fetch(`${GROBID_URL}/api/processFulltextDocument`, {
     method: "POST",
@@ -122,7 +124,7 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
     const md = docToMarkdown(doc);
     fs.writeFileSync(paperPath(paperId, "md"), md, "utf8");
 
-    res.json({ paper_id: paperId, metadata, doc, annotation: null });
+    res.json({ paper_id: paperId, metadata, doc, tei_xml: teiXml, annotation: null });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -146,7 +148,7 @@ app.get("/api/paper/:id", (req, res) => {
       ? JSON.parse(fs.readFileSync(jsonPath, "utf8"))
       : null;
 
-    res.json({ paper_id: paperId, metadata, doc, annotation });
+    res.json({ paper_id: paperId, metadata, doc, tei_xml: teiXml, annotation });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
