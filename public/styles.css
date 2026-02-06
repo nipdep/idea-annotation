@@ -670,8 +670,9 @@ mark.used {
 }
 
 .highlight-entry {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   border: 1px dashed var(--border);
   padding: 8px;
   border-radius: 8px;
@@ -684,6 +685,11 @@ mark.used {
   opacity: 0.75;
   border-style: solid;
   background: #f0fbf2;
+}
+
+.highlight-entry .meta {
+  font-size: 0.8rem;
+  color: var(--muted);
 }
 
 .type-picker {

@@ -1182,6 +1182,12 @@ function addHighlight() {
     if (activeTab === "argument") {
       state.highlightSelection.argument.add(id);
       requestNormalization(text);
+    } else if (activeTab === "concept") {
+      state.highlightSelection.concept.add(id);
+      const labelInput = el("conceptLabel");
+      if (labelInput && !labelInput.value.trim()) {
+        labelInput.value = text;
+      }
     }
 
     selection.removeAllRanges();
@@ -1207,11 +1213,6 @@ function createConcept() {
     return;
   }
   const type = typePath.join(" > ");
-  const roles = Array.from(document.querySelectorAll(".roles input:checked")).map((input) => input.value);
-  if (roles.length === 0) {
-    showToast("Select at least one role.", "error");
-    return;
-  }
 
   const sourceRefs = Array.from(state.highlightSelection.concept).map((id) => {
     const hl = state.highlights.find((h) => h.id === id);
@@ -1224,7 +1225,6 @@ function createConcept() {
     label,
     aliases: aliases.length ? aliases : undefined,
     type,
-    roles,
     source_refs: sourceRefs.length ? sourceRefs : undefined,
   };
 
