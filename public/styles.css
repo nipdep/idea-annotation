@@ -54,6 +54,17 @@ body {
   gap: 24px;
 }
 
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.app-logo {
+  width: 54px;
+  height: 54px;
+}
+
 .app-title {
   font-family: "Avenir Next", "Avenir", "Trebuchet MS", "Verdana", sans-serif;
   font-size: 28px;
@@ -143,10 +154,18 @@ textarea {
   padding: 12px 32px 32px;
 }
 
-.sidebar {
+.left-stack {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 18px;
   max-height: calc(100vh - 120px);
+  min-height: 0;
+}
+
+.scrollable {
   overflow-y: auto;
   padding-right: 6px;
+  min-height: 0;
 }
 
 .panel {
@@ -336,6 +355,20 @@ textarea {
   padding: 6px 8px;
 }
 
+.tei-table-wrap {
+  position: relative;
+  margin: 10px 0 14px;
+}
+
+.tei-table-badge {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  top: -10px;
+  right: -6px;
+  opacity: 0.35;
+}
+
 .tei-list {
   margin: 8px 0 12px 18px;
 }
@@ -422,10 +455,6 @@ mark.used {
   margin-top: 16px;
 }
 
-.submit-bar {
-  margin-top: auto;
-  padding-top: 12px;
-}
 
 .list {
   display: grid;

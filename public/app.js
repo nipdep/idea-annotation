@@ -377,10 +377,8 @@ function renderTeiDoc(teiXml, docView) {
   header.className = "tei-header";
   header.dataset.section = "Header";
 
-  const titleNode =
-    xml.querySelector("teiHeader titleStmt title") ||
-    xml.querySelector("fileDesc titleStmt title") ||
-    xml.querySelector("titleStmt title");
+  const titleStmt = getByTag(xml, "titleStmt")[0] || null;
+  const titleNode = titleStmt ? getByTag(titleStmt, "title")[0] : null;
   const title = extractText(titleNode);
   if (title) {
     const h1 = document.createElement("h1");
@@ -389,7 +387,7 @@ function renderTeiDoc(teiXml, docView) {
     header.appendChild(h1);
   }
 
-  const authorNodes = xml.querySelectorAll("teiHeader titleStmt author, titleStmt author");
+  const authorNodes = titleStmt ? getByTag(titleStmt, "author") : [];
   const authors = Array.from(authorNodes)
     .map((node) => formatAuthor(node))
     .filter(Boolean);
@@ -402,10 +400,13 @@ function renderTeiDoc(teiXml, docView) {
 
   if (header.childNodes.length) container.appendChild(header);
 
+  const profileDesc = getByTag(xml, "profileDesc")[0] || null;
+  const front = getByTag(xml, "front")[0] || null;
   const abstractNode =
-    xml.querySelector("profileDesc abstract") ||
-    xml.querySelector("text > front > abstract") ||
-    xml.querySelector("front abstract");
+    (profileDesc ? getByTag(profileDesc, "abstract")[0] : null) ||
+    (front ? getByTag(front, "abstract")[0] : null) ||
+    getByTag(xml, "abstract")[0] ||
+    null;
   const abstractText = extractText(abstractNode);
   if (abstractText) {
     const abstractSection = document.createElement("section");
@@ -421,13 +422,14 @@ function renderTeiDoc(teiXml, docView) {
     container.appendChild(abstractSection);
   }
 
-  const body = xml.querySelector("text > body") || xml.querySelector("body");
+  const textNode = getByTag(xml, "text")[0] || null;
+  const body = (textNode ? getByTag(textNode, "body")[0] : null) || getByTag(xml, "body")[0];
   if (body) {
     renderTeiChildren(body, container, "Body");
   }
 
-  const back = xml.querySelector("text > back") || xml.querySelector("back");
-  const listBibl = back ? back.querySelector("listBibl") : null;
+  const back = (textNode ? getByTag(textNode, "back")[0] : null) || getByTag(xml, "back")[0];
+  const listBibl = back ? getByTag(back, "listBibl")[0] : null;
   if (listBibl) {
     const refSection = document.createElement("section");
     refSection.className = "tei-section";
@@ -438,7 +440,11 @@ function renderTeiDoc(teiXml, docView) {
 
     const list = document.createElement("ol");
     list.className = "tei-bibl";
-    listBibl.querySelectorAll("biblStruct, bibl").forEach((bibl) => {
+    const biblNodes = [
+      ...getByTag(listBibl, "biblStruct"),
+      ...getByTag(listBibl, "bibl"),
+    ];
+    biblNodes.forEach((bibl) => {
       const item = document.createElement("li");
       item.textContent = extractText(bibl);
       list.appendChild(item);
@@ -458,8 +464,8 @@ function extractText(node) {
 
 function formatAuthor(authorNode) {
   if (!authorNode) return "";
-  const forenames = Array.from(authorNode.querySelectorAll("forename")).map((n) => extractText(n));
-  const surname = extractText(authorNode.querySelector("surname"));
+  const forenames = getByTag(authorNode, "forename").map((n) => extractText(n));
+  const surname = extractText(getByTag(authorNode, "surname")[0]);
   const name = [...forenames, surname].filter(Boolean).join(" ");
   return name || extractText(authorNode);
 }
@@ -467,11 +473,11 @@ function formatAuthor(authorNode) {
 function renderTeiChildren(node, parent, fallbackSection) {
   Array.from(node.childNodes).forEach((child) => {
     if (child.nodeType !== 1) return;
-    const tag = child.tagName.toLowerCase();
+    const tag = (child.localName || child.tagName || "").toLowerCase();
 
     if (tag === "div") {
       const headNode = Array.from(child.children).find(
-        (el) => el.tagName.toLowerCase() === "head"
+        (el) => (el.localName || el.tagName || "").toLowerCase() === "head"
       );
       const title = extractText(headNode);
       if (!title) {
@@ -504,9 +510,9 @@ function renderTeiChildren(node, parent, fallbackSection) {
     if (tag === "figure") {
       const fig = document.createElement("div");
       fig.className = "tei-figure";
-      const figHead = extractText(child.querySelector("head"));
-      const figDesc = extractText(child.querySelector("figDesc"));
-      const graphic = child.querySelector("graphic");
+      const figHead = extractText(getByTag(child, "head")[0]);
+      const figDesc = extractText(getByTag(child, "figDesc")[0]);
+      const graphic = getByTag(child, "graphic")[0] || null;
       const graphicRef = graphic?.getAttribute("url") || graphic?.getAttribute("target") || "";
       const title = figHead || "Figure";
       const label = document.createElement("div");
@@ -525,23 +531,18 @@ function renderTeiChildren(node, parent, fallbackSection) {
         desc.textContent = figDesc;
         fig.appendChild(desc);
       }
+      const figTable = getByTag(child, "table")[0] || null;
+      if (figTable) {
+        const tableEl = buildTable(figTable);
+        if (tableEl) fig.appendChild(tableEl);
+      }
       parent.appendChild(fig);
       return;
     }
 
     if (tag === "table") {
-      const table = document.createElement("table");
-      table.className = "tei-table";
-      child.querySelectorAll("row").forEach((rowNode) => {
-        const tr = document.createElement("tr");
-        rowNode.querySelectorAll("cell").forEach((cellNode) => {
-          const td = document.createElement("td");
-          td.textContent = extractText(cellNode);
-          tr.appendChild(td);
-        });
-        table.appendChild(tr);
-      });
-      parent.appendChild(table);
+      const tableEl = buildTable(child);
+      if (tableEl) parent.appendChild(tableEl);
       return;
     }
 
@@ -557,7 +558,7 @@ function renderTeiChildren(node, parent, fallbackSection) {
     if (tag === "list") {
       const ul = document.createElement("ul");
       ul.className = "tei-list";
-      child.querySelectorAll("item").forEach((itemNode) => {
+      getByTag(child, "item").forEach((itemNode) => {
         const li = document.createElement("li");
         li.textContent = extractText(itemNode);
         ul.appendChild(li);
@@ -568,6 +569,57 @@ function renderTeiChildren(node, parent, fallbackSection) {
 
     renderTeiChildren(child, parent, fallbackSection);
   });
+}
+
+function buildTable(tableNode) {
+  const rows = getByTag(tableNode, "row");
+  if (rows.length === 0) {
+    const fallback = extractText(tableNode);
+    if (!fallback) return null;
+    const wrap = document.createElement("div");
+    wrap.className = "tei-table-wrap";
+    const badge = document.createElement("img");
+    badge.className = "tei-table-badge";
+    badge.src = "/assets/idea_graph_figure.svg";
+    badge.alt = "Table";
+    const pre = document.createElement("div");
+    pre.className = "tei-figure-desc";
+    pre.textContent = fallback;
+    wrap.appendChild(badge);
+    wrap.appendChild(pre);
+    return wrap;
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "tei-table-wrap";
+  const badge = document.createElement("img");
+  badge.className = "tei-table-badge";
+  badge.src = "/assets/idea_graph_figure.svg";
+  badge.alt = "Table";
+
+  const table = document.createElement("table");
+  table.className = "tei-table";
+  rows.forEach((rowNode) => {
+    const tr = document.createElement("tr");
+    getByTag(rowNode, "cell").forEach((cellNode) => {
+      const td = document.createElement("td");
+      td.textContent = extractText(cellNode);
+      tr.appendChild(td);
+    });
+    table.appendChild(tr);
+  });
+
+  wrap.appendChild(badge);
+  wrap.appendChild(table);
+  return wrap;
+}
+
+function getByTag(root, tag) {
+  if (!root) return [];
+  if (root.getElementsByTagNameNS) {
+    return Array.from(root.getElementsByTagNameNS("*", tag));
+  }
+  return Array.from(root.getElementsByTagName(tag));
 }
 
 function renderHighlights() {
