@@ -990,27 +990,26 @@ function renderHighlightPickers() {
     }
 
     available.forEach((hl) => {
-      const row = document.createElement("label");
-      row.className = "highlight-pill";
+      const row = document.createElement("div");
+      const selected = state.highlightSelection[key].has(hl.id);
+      row.className = `highlight-pill ${selected ? "selected" : ""}`;
       row.title = `Section: ${hl.section}${hl.page ? ` - Page ${hl.page}` : ""}`;
 
       const text = document.createElement("span");
       text.className = "highlight-pill-text";
       text.textContent = hl.text;
 
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.checked = state.highlightSelection[key].has(hl.id);
-      checkbox.addEventListener("change", (e) => {
-        if (e.target.checked) {
-          state.highlightSelection[key].add(hl.id);
-        } else {
+      row.appendChild(text);
+      row.addEventListener("click", () => {
+        if (state.highlightSelection[key].has(hl.id)) {
           state.highlightSelection[key].delete(hl.id);
+          row.classList.remove("selected");
+        } else {
+          state.highlightSelection[key].add(hl.id);
+          row.classList.add("selected");
         }
       });
 
-      row.appendChild(text);
-      row.appendChild(checkbox);
       container.appendChild(row);
     });
   });
@@ -1029,6 +1028,8 @@ function consumeHighlights(ids) {
     const hl = state.highlights.find((h) => h.id === id);
     if (!hl) return;
     hl.used = true;
+    state.highlightSelection.concept.delete(id);
+    state.highlightSelection.argument.delete(id);
     const mark = document.querySelector(`mark[data-hid="${id}"]`);
     if (mark) mark.classList.add("used");
   });
@@ -1182,12 +1183,13 @@ function addHighlight() {
       used: false,
     });
 
+    state.highlightSelection.argument.add(id);
+    state.highlightSelection.concept.add(id);
+
     const activeTab = document.querySelector(".tab.active")?.dataset.tab;
     if (activeTab === "argument") {
-      state.highlightSelection.argument.add(id);
       requestNormalization(text);
     } else if (activeTab === "concept") {
-      state.highlightSelection.concept.add(id);
       const labelInput = el("conceptLabel");
       if (labelInput && !labelInput.value.trim()) {
         labelInput.value = text;

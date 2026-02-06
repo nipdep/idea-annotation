@@ -694,7 +694,6 @@ mark.used {
 .highlight-pill {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   padding: 10px 14px;
   border-radius: 999px;
@@ -706,19 +705,17 @@ mark.used {
   color: var(--ink);
 }
 
-.highlight-pill input {
-  margin: 0;
-  flex: 0 0 auto;
-}
-
 .highlight-pill-text {
   font-size: 0.9rem;
   line-height: 1.2;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
   flex: 1;
+}
+
+.highlight-pill.selected {
+  background: #bfe8c8;
+  border-color: #7bbf8b;
 }
 
 .ref-pill {
