@@ -40,6 +40,7 @@ const requiredArgumentTypes = ["issue", "idea", "approach", "claim"];
 
 const state = {
   paperId: null,
+  pdfHash: "",
   metadata: {},
   metadataChecks: {},
   doc: null,
@@ -1039,6 +1040,7 @@ async function uploadPdf() {
 
   const data = await res.json();
   state.paperId = data.paper_id;
+  state.pdfHash = data.pdf_hash || "";
   state.metadata = data.metadata || {};
   state.doc = data.doc;
   state.teiXml = data.tei_xml || "";
@@ -1062,7 +1064,11 @@ async function uploadPdf() {
   renderConceptTypePath();
   renderFlowGuide();
   if (loadingToast) loadingToast.remove();
-  showToast("Paper loaded and ready to annotate.", "success");
+  if (data.existing) {
+    showToast("Existing annotation loaded for this paper.", "success");
+  } else {
+    showToast("Paper loaded and ready to annotate.", "success");
+  }
 }
 
 function validateRequiredArguments() {
@@ -1095,6 +1101,7 @@ async function submitAnnotations() {
     concepts: state.annotations.concepts,
     arguments: state.annotations.arguments,
     created_at: state.annotations.created_at,
+    pdf_hash: state.pdfHash,
   };
 
   const savingToast = showToast("Saving annotations...", "loading", { persist: true });

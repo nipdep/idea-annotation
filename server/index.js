@@ -1,5 +1,6 @@
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 const express = require("express");
 const multer = require("multer");
 const fetch = require("node-fetch");
@@ -10,6 +11,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const DATASET_DIR = path.join(__dirname, "..", "dataset", "papers");
 const TMP_DIR = path.join(__dirname, "..", "tmp");
+const INDEX_PATH = path.join(DATASET_DIR, "index.json");
 const GROBID_URL = process.env.GROBID_URL || "http://localhost:8070";
 const LLM_URL = process.env.LLM_URL || "http://localhost:1234/v1/chat/completions";
 const LLM_MODEL = process.env.LLM_MODEL || "qwen2.5-7b-instruct-1m";
@@ -26,6 +28,47 @@ function ensureDir(dir) {
 
 ensureDir(TMP_DIR);
 ensureDir(DATASET_DIR);
+
+function loadIndex() {
+  if (!fs.existsSync(INDEX_PATH)) {
+    return { version: 1, items: {} };
+  }
+  try {
+    return JSON.parse(fs.readFileSync(INDEX_PATH, "utf8"));
+  } catch {
+    return { version: 1, items: {} };
+  }
+}
+
+function saveIndex(index) {
+  fs.writeFileSync(INDEX_PATH, JSON.stringify(index, null, 2));
+}
+
+function hashFile(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash("sha256");
+    const stream = fs.createReadStream(filePath);
+    stream.on("error", reject);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("end", () => resolve(hash.digest("hex")));
+  });
+}
+
+function loadPaper(paperId) {
+  const mdPath = paperPath(paperId, "md");
+  const teiPath = paperPath(paperId, "tei.xml");
+  const jsonPath = paperPath(paperId, "json");
+
+  if (!fs.existsSync(mdPath) || !fs.existsSync(teiPath)) return null;
+
+  const teiXml = fs.readFileSync(teiPath, "utf8");
+  const { metadata, doc } = teiToDoc(teiXml);
+  const annotation = fs.existsSync(jsonPath)
+    ? JSON.parse(fs.readFileSync(jsonPath, "utf8"))
+    : null;
+
+  return { teiXml, metadata, doc, annotation };
+}
 
 function renderIndex(res) {
   const indexPath = path.join(__dirname, "..", "public", "index.html");
@@ -117,9 +160,32 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
     ensureDir(DATASET_DIR);
     ensureDir(TMP_DIR);
 
+    const tempPath = req.file.path;
+    const pdfHash = await hashFile(tempPath);
+    const index = loadIndex();
+    const existing = index.items?.[pdfHash];
+
+    if (existing?.paper_id) {
+      const existingPaper = loadPaper(existing.paper_id);
+      if (existingPaper) {
+        fs.unlinkSync(tempPath);
+        return res.json({
+          paper_id: existing.paper_id,
+          metadata: existingPaper.metadata,
+          doc: existingPaper.doc,
+          tei_xml: existingPaper.teiXml,
+          annotation: existingPaper.annotation,
+          pdf_hash: pdfHash,
+          existing: true,
+        });
+      }
+      delete index.items[pdfHash];
+      saveIndex(index);
+    }
+
     const paperId = randomId();
     const pdfPath = paperPath(paperId, "pdf");
-    fs.renameSync(req.file.path, pdfPath);
+    fs.renameSync(tempPath, pdfPath);
 
     let teiXml = "";
     try {
@@ -137,7 +203,21 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
     const md = docToMarkdown(doc);
     fs.writeFileSync(paperPath(paperId, "md"), md, "utf8");
 
-    res.json({ paper_id: paperId, metadata, doc, tei_xml: teiXml, annotation: null });
+    index.items[pdfHash] = {
+      paper_id: paperId,
+      uploaded_at: new Date().toISOString(),
+    };
+    saveIndex(index);
+
+    res.json({
+      paper_id: paperId,
+      metadata,
+      doc,
+      tei_xml: teiXml,
+      annotation: null,
+      pdf_hash: pdfHash,
+      existing: false,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -147,21 +227,18 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
 app.get("/api/paper/:id", (req, res) => {
   try {
     const paperId = req.params.id;
-    const mdPath = paperPath(paperId, "md");
-    const teiPath = paperPath(paperId, "tei.xml");
-    const jsonPath = paperPath(paperId, "json");
-
-    if (!fs.existsSync(mdPath) || !fs.existsSync(teiPath)) {
+    const loaded = loadPaper(paperId);
+    if (!loaded) {
       return res.status(404).json({ error: "Paper not found" });
     }
 
-    const teiXml = fs.readFileSync(teiPath, "utf8");
-    const { metadata, doc } = teiToDoc(teiXml);
-    const annotation = fs.existsSync(jsonPath)
-      ? JSON.parse(fs.readFileSync(jsonPath, "utf8"))
-      : null;
-
-    res.json({ paper_id: paperId, metadata, doc, tei_xml: teiXml, annotation });
+    res.json({
+      paper_id: paperId,
+      metadata: loaded.metadata,
+      doc: loaded.doc,
+      tei_xml: loaded.teiXml,
+      annotation: loaded.annotation,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -180,6 +257,7 @@ app.post("/api/annotation/:id", (req, res) => {
       metadata_checks: payload.metadata_checks || {},
       concepts: payload.concepts || [],
       arguments: payload.arguments || [],
+      pdf_hash: payload.pdf_hash || "",
       updated_at: now,
       created_at: payload.created_at || now,
     };
