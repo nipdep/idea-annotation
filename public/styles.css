@@ -104,6 +104,15 @@ button.ghost {
   border: 1px solid var(--accent);
 }
 
+button.primary {
+  width: 100%;
+  background: var(--accent-2);
+}
+
+button.primary:hover {
+  box-shadow: 0 8px 16px rgba(42, 111, 110, 0.25);
+}
+
 input, select, textarea {
   width: 100%;
   padding: 8px 10px;
@@ -316,6 +325,11 @@ mark.used {
   margin-top: 16px;
 }
 
+.submit-bar {
+  margin-top: auto;
+  padding-top: 12px;
+}
+
 .list {
   display: grid;
   gap: 8px;
@@ -328,8 +342,12 @@ mark.used {
   background: #fff;
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
+}
+
+.list-item > div:first-child {
+  flex: 1;
 }
 
 .list-item .meta {
@@ -364,6 +382,100 @@ mark.used {
   opacity: 0.75;
   border-style: solid;
   background: #f0fbf2;
+}
+
+.type-picker {
+  display: grid;
+  gap: 8px;
+}
+
+.guide {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: #fffaf2;
+}
+
+.flow-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.flow-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.9rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  background: #f4efe8;
+  color: var(--muted);
+}
+
+.badge.done {
+  background: #d6f0dd;
+  color: #1e6b3e;
+}
+
+.badge.missing {
+  background: #ffe5dd;
+  color: #9a3b24;
+}
+
+.toast-container {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  display: grid;
+  gap: 10px;
+  z-index: 999;
+}
+
+.toast {
+  background: #fff;
+  border-radius: 10px;
+  padding: 10px 14px;
+  box-shadow: 0 12px 24px rgba(30, 27, 22, 0.18);
+  border-left: 4px solid var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 220px;
+}
+
+.toast.success {
+  border-left-color: #2f9c5a;
+}
+
+.toast.error {
+  border-left-color: #c0482e;
+}
+
+.toast.loading {
+  border-left-color: #2a6f6e;
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(42, 111, 110, 0.2);
+  border-top-color: var(--accent-2);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .highlight-entry input[type="text"] {

@@ -1,22 +1,42 @@
-const conceptTypes = [
-  "Method",
-  "Model",
-  "Dataset",
-  "Task",
-  "Metric",
-  "Theory",
-  "Artifact",
+const conceptTypeTree = [
+  {
+    label: "idea:Assumption",
+    children: [
+      { label: "idea:Methodological", children: [{ label: "idea:DataCollection" }] },
+      { label: "idea:Theoretical", children: [{ label: "idea:Analytical" }] },
+      { label: "idea:Scoping", children: [{ label: "idea:Negligence" }, { label: "idea:Restriction" }] },
+      { label: "idea:Resource", children: [{ label: "idea:Access" }, { label: "idea:Stability" }] },
+    ],
+  },
+  {
+    label: "idea:artifact",
+    children: [
+      { label: "idea:Algorithm" },
+      { label: "idea:Model" },
+      { label: "idea:Design" },
+      { label: "idea:Framework" },
+      { label: "idea:Dataset" },
+    ],
+  },
+  { label: "semsur:Approach" },
 ];
 
 const argumentTypes = [
-  "Claim",
-  "Evidence",
-  "Result",
-  "Assumption",
-  "Hypothesis",
-  "Definition",
-  "MethodologicalStatement",
+  "issue",
+  "backing",
+  "idea",
+  "approach",
+  "experiment",
+  "experiment design",
+  "experiment goal",
+  "experiment hypothesis",
+  "experiment result",
+  "claim",
+  "warrant",
+  "central argument",
 ];
+
+const requiredArgumentTypes = ["issue", "idea", "approach", "claim"];
 
 const state = {
   paperId: null,
@@ -29,12 +49,44 @@ const state = {
     concept: new Set(),
     argument: new Set(),
   },
+  conceptTypePath: [],
 };
 
 const el = (id) => document.getElementById(id);
 
 function setHint(message) {
   el("highlightHint").textContent = message || "";
+}
+
+function showToast(message, type = "info", options = {}) {
+  const container = el("toastContainer");
+  if (!container) return null;
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+
+  if (type === "loading") {
+    const spinner = document.createElement("div");
+    spinner.className = "spinner";
+    toast.appendChild(spinner);
+  }
+
+  const text = document.createElement("div");
+  text.textContent = message;
+  toast.appendChild(text);
+  container.appendChild(toast);
+
+  if (!options.persist) {
+    const duration = options.duration || 2800;
+    setTimeout(() => toast.remove(), duration);
+  }
+  return toast;
+}
+
+function formatTypeLabel(value) {
+  return value
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 function uniqueId(prefix, list) {
@@ -47,6 +99,115 @@ function normalizeAliases(value) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function renderConceptTypePicker(path = state.conceptTypePath) {
+  const container = el("conceptTypePicker");
+  if (!container) return;
+  container.innerHTML = "";
+
+  let nodes = conceptTypeTree;
+  let depth = 0;
+  const currentPath = Array.isArray(path) ? path : [];
+
+  while (nodes && nodes.length) {
+    const select = document.createElement("select");
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = depth === 0 ? "Select a category" : "Stop here";
+    select.appendChild(placeholder);
+
+    nodes.forEach((node) => {
+      const option = document.createElement("option");
+      option.value = node.label;
+      option.textContent = node.label;
+      select.appendChild(option);
+    });
+
+    const value = currentPath[depth] || "";
+    select.value = value;
+
+    select.addEventListener("change", (e) => {
+      const nextValue = e.target.value;
+      const nextPath = currentPath.slice(0, depth);
+      if (nextValue) nextPath.push(nextValue);
+      state.conceptTypePath = nextPath;
+      renderConceptTypePicker(nextPath);
+      renderConceptTypePath();
+    });
+
+    container.appendChild(select);
+
+    if (!value) break;
+    const node = nodes.find((item) => item.label === value);
+    nodes = node?.children || [];
+    depth += 1;
+  }
+}
+
+function renderConceptTypePath() {
+  const display = el("conceptTypePath");
+  if (!display) return;
+  if (!state.conceptTypePath.length) {
+    display.textContent = "Select a category. You can stop at any level.";
+    return;
+  }
+  display.textContent = `Selected: ${state.conceptTypePath.join(" > ")}`;
+}
+
+function normalizeArgType(value) {
+  return String(value || "").toLowerCase();
+}
+
+function renderFlowGuide() {
+  const container = el("flowGuide");
+  if (!container) return;
+  container.innerHTML = "";
+
+  const present = new Set(
+    (state.annotations.arguments || []).map((arg) => normalizeArgType(arg.arg_type))
+  );
+
+  const steps = [
+    { label: "Issue + Backing", required: ["issue"], optional: ["backing"] },
+    { label: "Idea", required: ["idea"] },
+    { label: "Approach", required: ["approach"] },
+    {
+      label: "Experiments (design, goal, hypothesis, result)",
+      optional: [
+        "experiment",
+        "experiment design",
+        "experiment goal",
+        "experiment hypothesis",
+        "experiment result",
+      ],
+    },
+    { label: "Claims + Warrants", required: ["claim"], optional: ["warrant", "central argument"] },
+  ];
+
+  steps.forEach((step) => {
+    const item = document.createElement("div");
+    item.className = "flow-item";
+
+    const label = document.createElement("div");
+    label.textContent = step.label;
+
+    const badge = document.createElement("span");
+    const requiredMissing = (step.required || []).some((type) => !present.has(type));
+    const optionalHit = (step.optional || []).some((type) => present.has(type));
+
+    if (step.required?.length) {
+      badge.className = `badge ${requiredMissing ? "missing" : "done"}`;
+      badge.textContent = requiredMissing ? "Required" : "Done";
+    } else {
+      badge.className = `badge ${optionalHit ? "done" : ""}`;
+      badge.textContent = optionalHit ? "Done" : "Optional";
+    }
+
+    item.appendChild(label);
+    item.appendChild(badge);
+    container.appendChild(item);
+  });
 }
 
 function renderMetadata() {
@@ -320,7 +481,13 @@ function renderConceptList() {
     item.className = "list-item";
 
     const info = document.createElement("div");
-    info.innerHTML = `<strong>${concept.label}</strong> <span class="meta">${concept.type}</span>`;
+    const roles = (concept.roles || []).join(", ");
+    const sourceCount = concept.source_refs ? concept.source_refs.length : 0;
+    info.innerHTML = `
+      <div><strong>${concept.concept_id}</strong> ${concept.label}</div>
+      <div class="meta">${concept.type || "Uncategorized"}${roles ? ` • ${roles}` : ""}</div>
+      <div class="meta">Source refs: ${sourceCount}</div>
+    `;
 
     const remove = document.createElement("button");
     remove.className = "ghost";
@@ -350,7 +517,13 @@ function renderArgumentList() {
     item.className = "list-item";
 
     const info = document.createElement("div");
-    info.innerHTML = `<strong>${argument.argument_id}</strong> <span class="meta">${argument.arg_type}</span>`;
+    const preview = argument.text ? `${argument.text.slice(0, 80)}${argument.text.length > 80 ? "..." : ""}` : "";
+    const conceptCount = argument.concept_refs ? argument.concept_refs.length : 0;
+    info.innerHTML = `
+      <div><strong>${argument.argument_id}</strong> ${formatTypeLabel(argument.arg_type || "")}</div>
+      <div class="meta">${preview}</div>
+      <div class="meta">Concept refs: ${conceptCount}</div>
+    `;
 
     const remove = document.createElement("button");
     remove.className = "ghost";
@@ -358,6 +531,7 @@ function renderArgumentList() {
     remove.addEventListener("click", () => {
       state.annotations.arguments = state.annotations.arguments.filter((a) => a.argument_id !== argument.argument_id);
       renderArgumentList();
+      renderFlowGuide();
     });
 
     item.appendChild(info);
@@ -382,24 +556,17 @@ function renderArgumentConceptRefs() {
     checkbox.type = "checkbox";
     checkbox.value = concept.concept_id;
     label.appendChild(checkbox);
-    label.append(` ${concept.label}`);
+    label.append(` ${concept.concept_id} ${concept.label}`);
     container.appendChild(label);
   });
 }
 
 function populateSelects() {
-  const conceptSelect = el("conceptType");
   const argumentSelect = el("argumentType");
-  conceptTypes.forEach((type) => {
-    const option = document.createElement("option");
-    option.value = type;
-    option.textContent = type;
-    conceptSelect.appendChild(option);
-  });
   argumentTypes.forEach((type) => {
     const option = document.createElement("option");
     option.value = type;
-    option.textContent = type;
+    option.textContent = formatTypeLabel(type);
     argumentSelect.appendChild(option);
   });
 }
@@ -409,6 +576,7 @@ function addHighlight() {
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed) {
     setHint("Select text in a single paragraph first.");
+    showToast("Select text in a paragraph, then click Add Highlight.", "error");
     return;
   }
 
@@ -421,6 +589,7 @@ function addHighlight() {
   const section = container.closest(".section");
   if (!paragraph || !section) {
     setHint("Select text inside the document body.");
+    showToast("Select text inside the document content.", "error");
     return;
   }
 
@@ -446,18 +615,27 @@ function addHighlight() {
     renderHighlightPickers();
   } catch (err) {
     setHint("Highlight must stay within a single paragraph.");
+    showToast("Highlight must stay within a single paragraph.", "error");
   }
 }
 
 function createConcept() {
   const label = el("conceptLabel").value.trim();
-  if (!label) return;
+  if (!label) {
+    showToast("Add a concept label.", "error");
+    return;
+  }
 
   const aliases = normalizeAliases(el("conceptAliases").value);
-  const type = el("conceptType").value;
+  const typePath = state.conceptTypePath || [];
+  if (!typePath.length) {
+    showToast("Select a concept category.", "error");
+    return;
+  }
+  const type = typePath.join(" > ");
   const roles = Array.from(document.querySelectorAll(".roles input:checked")).map((input) => input.value);
   if (roles.length === 0) {
-    alert("Select at least one role.");
+    showToast("Select at least one role.", "error");
     return;
   }
 
@@ -480,6 +658,9 @@ function createConcept() {
   consumeHighlights(Array.from(state.highlightSelection.concept));
   el("conceptLabel").value = "";
   el("conceptAliases").value = "";
+  state.conceptTypePath = [];
+  renderConceptTypePicker();
+  renderConceptTypePath();
   document.querySelectorAll(".roles input").forEach((input) => (input.checked = false));
   state.highlightSelection.concept.clear();
 
@@ -491,7 +672,10 @@ function createConcept() {
 
 function createArgument() {
   const text = el("argumentText").value.trim();
-  if (!text) return;
+  if (!text) {
+    showToast("Add canonical text for the argument.", "error");
+    return;
+  }
 
   const argType = el("argumentType").value;
   const conceptRefs = Array.from(el("argumentConceptRefs").querySelectorAll("input:checked")).map(
@@ -521,19 +705,25 @@ function createArgument() {
   renderArgumentList();
   renderHighlightPickers();
   renderHighlights();
+  renderFlowGuide();
 }
 
 async function uploadPdf() {
   const file = el("pdfInput").files[0];
-  if (!file) return;
+  if (!file) {
+    showToast("Choose a PDF first.", "error");
+    return;
+  }
 
   const form = new FormData();
   form.append("file", file);
 
-  setHint("Parsing PDF with Grobid...");
+  setHint("");
+  const loadingToast = showToast("Parsing PDF with Grobid...", "loading", { persist: true });
   const res = await fetch("/api/upload", { method: "POST", body: form });
   if (!res.ok) {
-    setHint("Upload failed.");
+    if (loadingToast) loadingToast.remove();
+    showToast("Upload failed.", "error");
     return;
   }
 
@@ -546,8 +736,9 @@ async function uploadPdf() {
   state.highlights = [];
   state.highlightSelection.concept.clear();
   state.highlightSelection.argument.clear();
+  state.conceptTypePath = [];
 
-  el("paperInfo").textContent = state.paperId;
+  el("paperInfo").textContent = `Saved as dataset/papers/${state.paperId}.{pdf,tei.xml,md,json}`;
 
   renderMetadata();
   renderDoc();
@@ -556,11 +747,36 @@ async function uploadPdf() {
   renderConceptList();
   renderArgumentList();
   renderArgumentConceptRefs();
-  setHint("");
+  renderConceptTypePicker();
+  renderConceptTypePath();
+  renderFlowGuide();
+  if (loadingToast) loadingToast.remove();
+  showToast("Paper loaded and ready to annotate.", "success");
 }
 
-async function saveAnnotations() {
-  if (!state.paperId) return;
+function validateRequiredArguments() {
+  const present = new Set(
+    (state.annotations.arguments || []).map((arg) => normalizeArgType(arg.arg_type))
+  );
+  return requiredArgumentTypes.filter((type) => !present.has(type));
+}
+
+async function submitAnnotations() {
+  if (!state.paperId) {
+    showToast("Upload a paper first.", "error");
+    return;
+  }
+
+  const missing = validateRequiredArguments();
+  if (missing.length) {
+    showToast(
+      `Missing required arguments: ${missing.map(formatTypeLabel).join(", ")}`,
+      "error",
+      { duration: 4000 }
+    );
+    renderFlowGuide();
+    return;
+  }
 
   const payload = {
     metadata: state.metadata,
@@ -570,16 +786,18 @@ async function saveAnnotations() {
     created_at: state.annotations.created_at,
   };
 
+  const savingToast = showToast("Saving annotations...", "loading", { persist: true });
   const res = await fetch(`/api/annotation/${state.paperId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 
+  if (savingToast) savingToast.remove();
   if (res.ok) {
-    alert("Annotation saved.");
+    showToast("Annotations submitted successfully.", "success");
   } else {
-    alert("Save failed.");
+    showToast("Save failed.", "error");
   }
 }
 
@@ -603,14 +821,18 @@ function init() {
   renderConceptList();
   renderArgumentList();
   renderArgumentConceptRefs();
+  renderConceptTypePicker();
+  renderConceptTypePath();
+  renderFlowGuide();
   wireTabs();
+
+  el("paperInfo").textContent = "Files will save under dataset/papers/";
 
   el("uploadBtn").addEventListener("click", uploadPdf);
   el("addHighlightBtn").addEventListener("click", addHighlight);
   el("addConceptBtn").addEventListener("click", createConcept);
   el("addArgumentBtn").addEventListener("click", createArgument);
-  el("saveAnnoBtn").addEventListener("click", saveAnnotations);
-  el("saveMetaBtn").addEventListener("click", () => alert("Metadata staged. It will save with annotations."));
+  el("submitBtn").addEventListener("click", submitAnnotations);
 }
 
 init();

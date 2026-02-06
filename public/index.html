@@ -20,7 +20,7 @@
     <main class="app-grid">
       <section class="panel sidebar" id="metadataPanel">
         <div class="panel-header">
-          <h2>Paper</h2>
+          <h2>Source File</h2>
         </div>
         <div class="upload-card">
           <div class="subhead">Upload PDF</div>
@@ -31,8 +31,7 @@
           <div id="paperInfo" class="muted"></div>
         </div>
         <div class="panel-header">
-          <h2>Metadata</h2>
-          <button id="saveMetaBtn" class="ghost">Save</button>
+          <h2>Bibliographic Data</h2>
         </div>
         <div id="metadataForm" class="stack"></div>
 
@@ -44,6 +43,10 @@
         <div class="list-block">
           <div class="subhead">Arguments</div>
           <div id="argumentList" class="list"></div>
+        </div>
+
+        <div class="submit-bar">
+          <button id="submitBtn" class="primary">Submit Annotations</button>
         </div>
       </section>
 
@@ -64,8 +67,12 @@
 
       <section class="panel" id="annotatePanel">
         <div class="panel-header">
-          <h2>Annotation</h2>
-          <button id="saveAnnoBtn">Submit</button>
+          <h2>Annotation Builder</h2>
+        </div>
+
+        <div class="guide">
+          <div class="subhead">Suggested Flow</div>
+          <div id="flowGuide" class="flow-list"></div>
         </div>
 
         <div class="tab-bar">
@@ -77,9 +84,9 @@
           <div class="stack">
             <label>Label <input id="conceptLabel" type="text" placeholder="e.g., Latent Dirichlet Allocation" /></label>
             <label>Aliases <input id="conceptAliases" type="text" placeholder="Comma-separated" /></label>
-            <label>Type
-              <select id="conceptType"></select>
-            </label>
+            <label>Category</label>
+            <div id="conceptTypePicker" class="type-picker"></div>
+            <div id="conceptTypePath" class="muted"></div>
             <div class="roles">
               <span>Roles</span>
               <label><input type="checkbox" value="argument_anchor" /> argument_anchor</label>
@@ -114,6 +121,8 @@
 
       </section>
     </main>
+
+    <div id="toastContainer" class="toast-container"></div>
 
     <script src="/app.js"></script>
   </body>
