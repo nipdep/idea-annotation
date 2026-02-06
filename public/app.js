@@ -18,7 +18,6 @@ const conceptTypeTree = [
       { label: "idea:Dataset" },
     ],
   },
-  { label: "semsur:Approach" },
 ];
 
 const argumentTypes = [
@@ -156,9 +155,10 @@ function renderConceptTypePicker(path = state.conceptTypePath) {
 
   while (nodes && nodes.length) {
     const select = document.createElement("select");
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = depth === 0 ? "Select a category" : "Stop here";
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = depth === 0 ? "Select a category" : "Stop here";
+      placeholder.disabled = depth === 0;
     select.appendChild(placeholder);
 
     nodes.forEach((node) => {
@@ -169,11 +169,15 @@ function renderConceptTypePicker(path = state.conceptTypePath) {
     });
 
     const value = currentPath[depth] || "";
-    select.value = value;
+    if (value) {
+      select.value = value;
+    } else if (depth === 0) {
+      select.selectedIndex = 0;
+    }
 
     select.addEventListener("change", (e) => {
       const nextValue = e.target.value;
-      const nextPath = currentPath.slice(0, depth);
+      const nextPath = state.conceptTypePath.slice(0, depth);
       if (nextValue) nextPath.push(nextValue);
       state.conceptTypePath = nextPath;
       renderConceptTypePicker(nextPath);

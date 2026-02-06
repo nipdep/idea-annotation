@@ -692,39 +692,51 @@ mark.used {
 }
 
 .highlight-pill {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 12px;
   padding: 6px 12px;
   border-radius: 999px;
   background: #f4efe8;
   border: 1px solid var(--border);
   margin-bottom: 8px;
   cursor: pointer;
+  width: 100%;
 }
 
 .highlight-pill input {
   margin: 0;
+  flex: 0 0 auto;
 }
 
 .highlight-pill-text {
   font-size: 0.9rem;
+  line-height: 1.2;
+  word-break: keep-all;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
 }
 
 .ref-pill {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 12px;
   padding: 6px 12px;
   border-radius: 999px;
   background: #f4efe8;
   border: 1px solid var(--border);
   font-size: 0.85rem;
   cursor: pointer;
+  width: 100%;
 }
 
 .ref-pill input {
   margin: 0;
+  flex: 0 0 auto;
 }
 
 .type-picker {
