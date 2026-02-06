@@ -357,6 +357,11 @@ function renderLibraryGraph() {
 
   const items = state.library.filtered || [];
   const count = items.length;
+  const selected = items.find((item) => item.paper_id === state.library.selectedId);
+  if (selected) {
+    renderPaperFocusedGraph(svg, selected);
+    return;
+  }
   if (count === 0) {
     const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
     text.setAttribute("x", "20");
@@ -415,6 +420,135 @@ function renderLibraryGraph() {
     group.appendChild(label);
     svg.appendChild(group);
   });
+}
+
+function renderPaperFocusedGraph(svg, item) {
+  const width = 800;
+  const height = 520;
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+  const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  bg.setAttribute("x", "0");
+  bg.setAttribute("y", "0");
+  bg.setAttribute("width", String(width));
+  bg.setAttribute("height", String(height));
+  bg.setAttribute("fill", "transparent");
+  bg.addEventListener("click", () => {
+    state.library.selectedId = null;
+    renderLibraryGraph();
+    renderLibraryTable();
+    renderLibraryDetail();
+  });
+  svg.appendChild(bg);
+
+  const title = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  title.setAttribute("x", "20");
+  title.setAttribute("y", "28");
+  title.setAttribute("fill", "#1e1b16");
+  title.setAttribute("font-size", "14");
+  title.textContent = (item.metadata?.title || "Selected Paper").slice(0, 80);
+  svg.appendChild(title);
+
+  const hint = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  hint.setAttribute("x", "20");
+  hint.setAttribute("y", "46");
+  hint.setAttribute("fill", "#6b6157");
+  hint.setAttribute("font-size", "11");
+  hint.textContent = "Click background to return to paper graph";
+  svg.appendChild(hint);
+
+  const center = { x: width / 2, y: 90 };
+  drawNode(svg, center.x, center.y, "Paper", "graph-node paper-node");
+
+  const argTypes = (item.arguments || []).map((arg) => normalizeArgType(arg.arg_type));
+  const argCounts = argTypes.reduce((acc, type) => {
+    if (!type) return acc;
+    acc[type] = (acc[type] || 0) + 1;
+    return acc;
+  }, {});
+
+  const chainOrder = ["issue", "idea", "approach", "experiment", "claim"];
+  const chain = chainOrder.filter((type) => argCounts[type]);
+  const chainY = 220;
+  const spacing = chain.length > 1 ? 140 : 0;
+  const startX = width / 2 - (spacing * (chain.length - 1)) / 2;
+
+  const chainPositions = chain.map((type, idx) => ({
+    type,
+    x: startX + idx * spacing,
+    y: chainY,
+  }));
+
+  chainPositions.forEach((node, idx) => {
+    drawNode(svg, node.x, node.y, formatTypeLabel(node.type), "graph-node");
+    drawEdge(svg, center.x, center.y + 18, node.x, node.y - 18);
+    if (idx > 0) {
+      drawEdge(svg, chainPositions[idx - 1].x, chainPositions[idx - 1].y, node.x, node.y);
+    }
+  });
+
+  const extrasOrder = [
+    "backing",
+    "warrant",
+    "evidence",
+    "result",
+    "hypothesis",
+    "goal",
+    "experiment design",
+    "experiment goal",
+    "experiment hypothesis",
+    "experiment result",
+    "central argument",
+  ];
+  const extras = extrasOrder.filter((type) => argCounts[type]);
+  const extrasY = 360;
+  const extraSpacing = extras.length > 1 ? 120 : 0;
+  const extraStartX = width / 2 - (extraSpacing * (extras.length - 1)) / 2;
+
+  extras.forEach((type, idx) => {
+    const x = extraStartX + idx * extraSpacing;
+    drawNode(svg, x, extrasY, formatTypeLabel(type), "graph-node small-node");
+    const anchor = chainPositions[chainPositions.length - 1] || { x: center.x, y: center.y };
+    drawEdge(svg, anchor.x, anchor.y, x, extrasY - 18);
+  });
+
+  const conceptCount = (item.concepts || []).length;
+  if (conceptCount) {
+    const conceptNodeY = 460;
+    drawNode(svg, width / 2, conceptNodeY, `Concepts (${conceptCount})`, "graph-node small-node");
+    drawEdge(svg, center.x, center.y + 20, width / 2, conceptNodeY - 18);
+  }
+}
+
+function drawNode(svg, x, y, label, className) {
+  const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  circle.setAttribute("cx", x);
+  circle.setAttribute("cy", y);
+  circle.setAttribute("r", className.includes("small-node") ? "16" : "20");
+  circle.setAttribute("class", className);
+
+  const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  text.setAttribute("x", x);
+  text.setAttribute("y", y + 4);
+  text.setAttribute("text-anchor", "middle");
+  text.setAttribute("class", "graph-label");
+  text.textContent = label;
+
+  group.appendChild(circle);
+  group.appendChild(text);
+  svg.appendChild(group);
+}
+
+function drawEdge(svg, x1, y1, x2, y2) {
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", x1);
+  line.setAttribute("y1", y1);
+  line.setAttribute("x2", x2);
+  line.setAttribute("y2", y2);
+  line.setAttribute("stroke", "#d0c6bd");
+  line.setAttribute("stroke-width", "1.2");
+  svg.appendChild(line);
 }
 
 function renderLibraryDetail() {

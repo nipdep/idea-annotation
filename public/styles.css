@@ -204,6 +204,15 @@ body {
   stroke: #1e6b6a;
 }
 
+.graph-node.paper-node {
+  fill: #ffe7d6;
+  stroke: #c05635;
+}
+
+.graph-node.small-node {
+  stroke-width: 1.5;
+}
+
 .graph-label {
   font-size: 12px;
   fill: var(--ink);
