@@ -615,7 +615,7 @@ function buildTable(tableNode) {
     wrap.className = "tei-table-wrap";
     const badge = document.createElement("img");
     badge.className = "tei-table-badge";
-    badge.src = withBase("/assets/icon.png");
+    badge.src = withBase("/assets/idea_graph_figure.svg");
     badge.alt = "Table";
     const pre = document.createElement("div");
     pre.className = "tei-figure-desc";
@@ -629,7 +629,7 @@ function buildTable(tableNode) {
   wrap.className = "tei-table-wrap";
   const badge = document.createElement("img");
   badge.className = "tei-table-badge";
-  badge.src = withBase("/assets/icon.png");
+  badge.src = withBase("/assets/idea_graph_figure.svg");
   badge.alt = "Table";
 
   const table = document.createElement("table");
@@ -1123,6 +1123,19 @@ function wireTabs() {
   });
 }
 
+function wireNavigation() {
+  document.querySelectorAll(".nav-tab").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".nav-tab").forEach((tab) => tab.classList.remove("active"));
+      document.querySelectorAll(".page").forEach((page) => page.classList.remove("active"));
+      button.classList.add("active");
+      const target = document.getElementById(button.dataset.page);
+      if (target) target.classList.add("active");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  });
+}
+
 function init() {
   populateSelects();
   renderMetadata();
@@ -1136,6 +1149,7 @@ function init() {
   renderConceptTypePath();
   renderFlowGuide();
   wireTabs();
+  wireNavigation();
 
   el("paperInfo").textContent = "Files will save under dataset/papers/";
 

@@ -77,6 +77,37 @@ body {
   margin-top: 6px;
 }
 
+.header-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.nav-tab {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--ink);
+  padding: 8px 14px;
+  border-radius: 999px;
+}
+
+.nav-tab.active {
+  background: var(--accent-2);
+  color: white;
+  border-color: var(--accent-2);
+}
+
+.page {
+  display: none;
+}
+
+.page.active {
+  display: block;
+}
+
+.guidelines {
+  padding: 12px 32px 32px;
+}
+
 .upload-bar {
   display: flex;
   gap: 12px;
@@ -151,14 +182,18 @@ textarea.loading {
 
 .app-grid {
   display: grid;
-  grid-template-columns: 1.1fr 2.2fr 1.2fr;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 2.2fr) minmax(0, 1.2fr);
   gap: 18px;
   padding: 12px 32px 32px;
 }
 
+.app-grid > * {
+  min-width: 0;
+}
+
 .left-stack {
   display: grid;
-  grid-template-rows: 190px 1fr 140px;
+  grid-template-rows: 190px 1fr 110px;
   gap: 18px;
   height: calc(100vh - 120px);
   min-height: 0;
@@ -175,6 +210,14 @@ textarea.loading {
   min-height: 0;
 }
 
+#submitPanel {
+  padding-bottom: 12px;
+}
+
+#submitPanel .panel-header {
+  margin-bottom: 8px;
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -185,6 +228,7 @@ textarea.loading {
   display: flex;
   flex-direction: column;
   animation: fadeIn 0.5s ease;
+  min-width: 0;
 }
 
 .panel-header {
@@ -263,6 +307,7 @@ textarea.loading {
 
 .doc-panel {
   min-height: 70vh;
+  min-width: 0;
 }
 
 .doc-actions {
@@ -274,6 +319,7 @@ textarea.loading {
 
 .doc-view {
   overflow-y: auto;
+  overflow-x: auto;
   padding-right: 6px;
   max-height: calc(70vh - 80px);
 }
@@ -282,6 +328,8 @@ textarea.loading {
   border-radius: 12px;
   border: 1px solid var(--border);
   padding: 16px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .tei-header {
@@ -329,6 +377,7 @@ textarea.loading {
 .doc-paragraph {
   margin: 0 0 10px;
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .tei-figure,
@@ -349,10 +398,12 @@ textarea.loading {
 .tei-figure-desc {
   color: var(--muted);
   font-size: 0.9rem;
+  overflow-wrap: anywhere;
 }
 
 .tei-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   margin: 10px 0 14px;
   font-size: 0.9rem;
@@ -361,11 +412,14 @@ textarea.loading {
 .tei-table td {
   border: 1px solid var(--border);
   padding: 6px 8px;
+  word-break: break-word;
 }
 
 .tei-table-wrap {
   position: relative;
   margin: 10px 0 14px;
+  overflow-x: auto;
+  max-width: 100%;
 }
 
 .tei-table-badge {
@@ -387,6 +441,7 @@ textarea.loading {
   padding-top: 12px;
   color: var(--muted);
   font-size: 0.9rem;
+  overflow-wrap: anywhere;
 }
 
 .section {
@@ -459,6 +514,12 @@ mark.used {
   font-size: 12px;
 }
 
+.required {
+  color: #c0482e;
+  font-weight: 700;
+  margin-left: 4px;
+}
+
 .list-block {
   margin-top: 16px;
 }
@@ -478,6 +539,7 @@ mark.used {
   justify-content: space-between;
   align-items: flex-start;
   gap: 8px;
+  overflow-wrap: anywhere;
 }
 
 .list-item > div:first-child {
@@ -510,6 +572,7 @@ mark.used {
   border-radius: 8px;
   margin-bottom: 8px;
   background: #fffaf2;
+  overflow-wrap: anywhere;
 }
 
 .highlight-entry.used {
