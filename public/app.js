@@ -657,25 +657,45 @@ function renderLibraryDetail() {
     block.className = "list-block";
     block.innerHTML = `<div class="subhead">Selected Node</div>`;
     const info = document.createElement("div");
-    info.className = "list-item";
+    info.className = "stack";
     if (inst.kind === "argument") {
       const arg = (selected.arguments || []).find((a) => a.argument_id === inst.id);
       if (arg) {
         info.innerHTML = `
-          <div>
-            <div><strong>${arg.argument_id}</strong> ${formatTypeLabel(arg.arg_type || "")}</div>
-            <div class="meta">${arg.text || ""}</div>
-          </div>
+          <div><strong>${arg.argument_id}</strong></div>
+          <div class="meta">Class: ${formatTypeLabel(arg.arg_type || "")}</div>
+          <div><strong>Label</strong></div>
+          <div class="meta">${arg.text || "-"}</div>
+          <div><strong>Description</strong></div>
+          <div class="meta">${arg.description || "-"}</div>
+          <details>
+            <summary class="meta">Last updated</summary>
+            <div class="meta">${selected.updated_at || selected.annotation?.updated_at || "-"}</div>
+          </details>
+          <details>
+            <summary class="meta">Annotator</summary>
+            <div class="meta">${selected.metadata?.annotator || "-"}</div>
+          </details>
         `;
       }
     } else if (inst.kind === "concept") {
       const concept = (selected.concepts || []).find((c) => c.concept_id === inst.id);
       if (concept) {
         info.innerHTML = `
-          <div>
-            <div><strong>${concept.concept_id}</strong> ${concept.label || ""}</div>
-            <div class="meta">${concept.type || ""}</div>
-          </div>
+          <div><strong>${concept.concept_id}</strong></div>
+          <div class="meta">Class: ${concept.type || "-"}</div>
+          <div><strong>Label</strong></div>
+          <div class="meta">${concept.label || "-"}</div>
+          <div><strong>Description</strong></div>
+          <div class="meta">-</div>
+          <details>
+            <summary class="meta">Last updated</summary>
+            <div class="meta">${selected.updated_at || selected.annotation?.updated_at || "-"}</div>
+          </details>
+          <details>
+            <summary class="meta">Annotator</summary>
+            <div class="meta">${selected.metadata?.annotator || "-"}</div>
+          </details>
         `;
       }
     }
@@ -1555,6 +1575,7 @@ function createArgument() {
     argument_id: uniqueId("A", state.annotations.arguments),
     text,
     arg_type: argType,
+    description: el("argumentDescription").value.trim() || undefined,
     concept_refs: conceptRefs.length ? conceptRefs : undefined,
     source_refs: sourceRefs.length ? sourceRefs : undefined,
   };
