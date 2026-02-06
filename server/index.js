@@ -11,8 +11,8 @@ const PORT = process.env.PORT || 3000;
 const DATASET_DIR = path.join(__dirname, "..", "dataset", "papers");
 const TMP_DIR = path.join(__dirname, "..", "tmp");
 const GROBID_URL = process.env.GROBID_URL || "http://localhost:8070";
-const LLM_URL = process.env.LLM_URL || "http://localhost:1234/v1/x";
-const LLM_MODEL = process.env.LLM_MODEL || "";
+const LLM_URL = process.env.LLM_URL || "http://localhost:1234/v1/chat/completions";
+const LLM_MODEL = process.env.LLM_MODEL || "qwen2.5-7b-instruct-1m";
 const LLM_MODE = process.env.LLM_MODE || "chat";
 const BASE_PATH = (process.env.BASE_PATH || "/").replace(/\/?$/, "/");
 
