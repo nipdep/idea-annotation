@@ -1117,15 +1117,20 @@ function renderArgumentConceptRefs() {
   }
 
   state.annotations.concepts.forEach((concept) => {
-    const label = document.createElement("label");
+    const label = document.createElement("div");
     label.className = "ref-pill";
+
     const text = document.createElement("span");
     text.textContent = `${concept.concept_id} ${concept.label}`;
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.value = concept.concept_id;
+    label.dataset.conceptId = concept.concept_id;
+    label.dataset.selected = "false";
+
     label.appendChild(text);
-    label.appendChild(checkbox);
+    label.addEventListener("click", () => {
+      label.classList.toggle("selected");
+      label.dataset.selected = label.classList.contains("selected") ? "true" : "false";
+    });
+
     container.appendChild(label);
   });
 }
@@ -1258,8 +1263,8 @@ function createArgument() {
   }
 
   const argType = el("argumentType").value;
-  const conceptRefs = Array.from(el("argumentConceptRefs").querySelectorAll("input:checked")).map(
-    (input) => input.value
+  const conceptRefs = Array.from(el("argumentConceptRefs").querySelectorAll(".ref-pill.selected")).map(
+    (pill) => pill.dataset.conceptId
   );
 
   const sourceRefs = Array.from(state.highlightSelection.argument).map((id) => {
@@ -1280,7 +1285,9 @@ function createArgument() {
   consumeHighlights(Array.from(state.highlightSelection.argument));
   el("argumentText").value = "";
   state.highlightSelection.argument.clear();
-  el("argumentConceptRefs").querySelectorAll("input").forEach((input) => (input.checked = false));
+  el("argumentConceptRefs")
+    .querySelectorAll(".ref-pill")
+    .forEach((pill) => pill.classList.remove("selected"));
 
   renderArgumentList();
   renderHighlightPickers();

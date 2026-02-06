@@ -733,9 +733,9 @@ mark.used {
   color: var(--ink);
 }
 
-.ref-pill input {
-  margin: 0;
-  flex: 0 0 auto;
+.ref-pill.selected {
+  background: #bfe8c8;
+  border-color: #7bbf8b;
 }
 
 .type-picker {
