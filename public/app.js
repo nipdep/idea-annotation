@@ -623,6 +623,7 @@ function renderPaperFocusedGraph(svg, item) {
     .selectAll("g")
     .data(nodes)
     .join("g")
+    .style("cursor", (d) => (d.type === "class" || d.type === "instance" ? "pointer" : "default"))
     .call(
       window.d3
         .drag()
@@ -644,6 +645,19 @@ function renderPaperFocusedGraph(svg, item) {
         })
     );
 
+  node.on("click", (event, d) => {
+    event.stopPropagation();
+    if (d.type === "instance") {
+      state.library.selectedInstance = { kind: d.instance.kind, id: d.instance.id };
+      renderLibraryDetail();
+      renderLibraryGraph();
+      return;
+    }
+    if (d.type === "class") {
+      toggleGraphGroup(d.id);
+    }
+  });
+
   node
     .append("circle")
     .attr("r", (d) => d.r)
@@ -652,18 +666,6 @@ function renderPaperFocusedGraph(svg, item) {
       if (d.type === "instance") return "graph-node small-node";
       const hasInstances = (groups[d.id] || []).length > 0;
       return `graph-node${hasInstances ? "" : " empty"}${state.library.expanded.has(d.id) ? " active" : ""}`;
-    })
-    .on("click", (event, d) => {
-      event.stopPropagation();
-      if (d.type === "instance") {
-        state.library.selectedInstance = { kind: d.instance.kind, id: d.instance.id };
-        renderLibraryDetail();
-        renderLibraryGraph();
-        return;
-      }
-      if (d.type === "class") {
-        toggleGraphGroup(d.id);
-      }
     });
 
   node
