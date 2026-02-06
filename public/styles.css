@@ -276,6 +276,11 @@ textarea.loading {
   color: var(--muted);
 }
 
+textarea[readonly] {
+  background: #f8f5ef;
+  color: var(--muted);
+}
+
 .muted {
   color: var(--muted);
   font-size: 0.9rem;

@@ -97,6 +97,16 @@ function showToast(message, type = "info", options = {}) {
   return toast;
 }
 
+function updateDescription(kind) {
+  const textarea = el(kind === "concept" ? "conceptDescription" : "argumentDescription");
+  if (!textarea) return;
+  const ids = Array.from(state.highlightSelection[kind]);
+  const texts = state.highlights
+    .filter((hl) => ids.includes(hl.id))
+    .map((hl) => hl.text);
+  textarea.value = texts.join("\n\n");
+}
+
 async function requestNormalization(text) {
   const textArea = el("argumentText");
   if (!textArea) return;
@@ -1008,6 +1018,7 @@ function renderHighlightPickers() {
           state.highlightSelection[key].add(hl.id);
           row.classList.add("selected");
         }
+        updateDescription(key);
       });
 
       container.appendChild(row);
@@ -1021,6 +1032,10 @@ function removeHighlight(id) {
     mark.replaceWith(document.createTextNode(mark.textContent));
   }
   state.highlights = state.highlights.filter((h) => h.id !== id);
+  state.highlightSelection.concept.delete(id);
+  state.highlightSelection.argument.delete(id);
+  updateDescription("concept");
+  updateDescription("argument");
 }
 
 function consumeHighlights(ids) {
@@ -1033,6 +1048,8 @@ function consumeHighlights(ids) {
     const mark = document.querySelector(`mark[data-hid="${id}"]`);
     if (mark) mark.classList.add("used");
   });
+  updateDescription("concept");
+  updateDescription("argument");
 }
 
 function renderConceptList() {
@@ -1190,6 +1207,8 @@ function addHighlight() {
 
     state.highlightSelection.argument.add(id);
     state.highlightSelection.concept.add(id);
+    updateDescription("argument");
+    updateDescription("concept");
 
     const activeTab = document.querySelector(".tab.active")?.dataset.tab;
     if (activeTab === "argument") {
@@ -1243,6 +1262,7 @@ function createConcept() {
   consumeHighlights(Array.from(state.highlightSelection.concept));
   el("conceptLabel").value = "";
   el("conceptAliases").value = "";
+  el("conceptDescription").value = "";
   state.conceptTypePath = [];
   renderConceptTypePicker();
   renderConceptTypePath();
@@ -1284,6 +1304,7 @@ function createArgument() {
   state.annotations.arguments.push(argument);
   consumeHighlights(Array.from(state.highlightSelection.argument));
   el("argumentText").value = "";
+  el("argumentDescription").value = "";
   state.highlightSelection.argument.clear();
   el("argumentConceptRefs")
     .querySelectorAll(".ref-pill")
@@ -1339,6 +1360,8 @@ async function uploadPdf() {
   renderConceptTypePicker();
   renderConceptTypePath();
   renderFlowGuide();
+  updateDescription("concept");
+  updateDescription("argument");
   if (loadingToast) loadingToast.remove();
   if (data.existing) {
     showToast("Existing annotation loaded for this paper.", "success");
@@ -1434,6 +1457,8 @@ function init() {
   renderConceptTypePicker();
   renderConceptTypePath();
   renderFlowGuide();
+  updateDescription("concept");
+  updateDescription("argument");
   wireTabs();
   wireNavigation();
   wireLibraryControls();
