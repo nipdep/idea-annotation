@@ -22,6 +22,7 @@
       </div>
       <nav class="header-tabs">
         <button class="nav-tab active" data-page="annotatorPage">Annotator</button>
+        <button class="nav-tab" data-page="libraryPage">Library</button>
         <button class="nav-tab" data-page="guidelinesPage">Guidelines</button>
       </nav>
     </header>
@@ -102,11 +103,6 @@
             <label>Category <span class="required">*</span></label>
             <div id="conceptTypePicker" class="type-picker"></div>
             <div id="conceptTypePath" class="muted"></div>
-            <div class="roles">
-              <span>Roles <span class="required">*</span></span>
-              <label><input type="checkbox" value="argument_anchor" /> argument_anchor</label>
-              <label><input type="checkbox" value="background" /> background</label>
-            </div>
           </div>
           <div class="stack">
             <div class="subhead">Source refs</div>
@@ -117,6 +113,9 @@
 
         <div id="argumentTab" class="tab-content">
           <div class="stack">
+            <label>Description
+              <textarea id="argumentDescription" rows="3" placeholder="Selected grounding text will appear here." readonly></textarea>
+            </label>
             <label>Canonical Text <span class="required">*</span>
               <textarea id="argumentText" rows="4" placeholder="Minimal assertion..."></textarea>
             </label>
@@ -180,12 +179,57 @@
       </div>
     </section>
 
+    <section id="libraryPage" class="page">
+      <div class="library">
+        <div class="library-controls">
+          <input id="librarySearch" type="text" placeholder="Search papers, concepts, arguments..." />
+          <div class="view-toggle">
+            <button class="toggle active" data-view="table">Table View</button>
+            <button class="toggle" data-view="graph">Graph View</button>
+          </div>
+        </div>
+
+        <div class="library-grid">
+          <div class="panel">
+            <div id="libraryTableView" class="library-view active">
+              <table class="library-table">
+                <thead>
+                  <tr>
+                    <th>Title</th>
+                    <th>Year</th>
+                    <th>Venue</th>
+                    <th>Concepts</th>
+                    <th>Arguments</th>
+                  </tr>
+                </thead>
+                <tbody id="libraryTableBody"></tbody>
+              </table>
+            </div>
+
+            <div id="libraryGraphView" class="library-view">
+              <div class="graph-container">
+                <svg id="graphSvg" viewBox="0 0 800 420" aria-label="Paper graph"></svg>
+              </div>
+            </div>
+          </div>
+
+          <aside class="panel" id="libraryDetail">
+            <div class="panel-header">
+              <h2>Paper Details</h2>
+            </div>
+            <div id="libraryDetailBody" class="stack"></div>
+          </aside>
+        </div>
+      </div>
+    </section>
+
     <footer class="app-footer">
-      © 2026 Tetherless World Constitum | RPI
+      Copyright © 2026 Rensselaer Polytechnic Institute | <a href="https://tw.rpi.edu/about" target="_blank" rel="noopener noreferrer">Tetherless World Constellation</a>
     </footer>
 
     <div id="toastContainer" class="toast-container"></div>
 
+    <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

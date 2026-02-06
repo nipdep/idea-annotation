@@ -18,7 +18,6 @@ const conceptTypeTree = [
       { label: "idea:Dataset" },
     ],
   },
-  { label: "semsur:Approach" },
 ];
 
 const argumentTypes = [
@@ -40,6 +39,7 @@ const requiredArgumentTypes = ["issue", "idea", "approach", "claim"];
 
 const state = {
   paperId: null,
+  pdfHash: "",
   metadata: {},
   metadataChecks: {},
   doc: null,
@@ -51,6 +51,16 @@ const state = {
     argument: new Set(),
   },
   conceptTypePath: [],
+  library: {
+    items: [],
+    filtered: [],
+    selectedId: null,
+    view: "table",
+    loaded: false,
+    expanded: new Set(),
+    selectedInstance: null,
+    graphPositions: {},
+  },
 };
 
 const el = (id) => document.getElementById(id);
@@ -88,6 +98,17 @@ function showToast(message, type = "info", options = {}) {
     setTimeout(() => toast.remove(), duration);
   }
   return toast;
+}
+
+function updateDescription(kind) {
+  if (kind !== "argument") return;
+  const textarea = el("argumentDescription");
+  if (!textarea) return;
+  const ids = Array.from(state.highlightSelection[kind]);
+  const texts = state.highlights
+    .filter((hl) => ids.includes(hl.id))
+    .map((hl) => hl.text);
+  textarea.value = texts.join("\n\n");
 }
 
 async function requestNormalization(text) {
@@ -148,9 +169,10 @@ function renderConceptTypePicker(path = state.conceptTypePath) {
 
   while (nodes && nodes.length) {
     const select = document.createElement("select");
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = depth === 0 ? "Select a category" : "Stop here";
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = depth === 0 ? "Select a category" : "Stop here";
+      placeholder.disabled = depth === 0;
     select.appendChild(placeholder);
 
     nodes.forEach((node) => {
@@ -161,11 +183,16 @@ function renderConceptTypePicker(path = state.conceptTypePath) {
     });
 
     const value = currentPath[depth] || "";
-    select.value = value;
+    if (value) {
+      select.value = value;
+    } else if (depth === 0) {
+      select.selectedIndex = 0;
+    }
 
+    const depthIndex = depth;
     select.addEventListener("change", (e) => {
       const nextValue = e.target.value;
-      const nextPath = currentPath.slice(0, depth);
+      const nextPath = state.conceptTypePath.slice(0, depthIndex);
       if (nextValue) nextPath.push(nextValue);
       state.conceptTypePath = nextPath;
       renderConceptTypePicker(nextPath);
@@ -243,6 +270,790 @@ function renderFlowGuide() {
     item.appendChild(label);
     item.appendChild(badge);
     container.appendChild(item);
+  });
+}
+
+function flattenAuthors(authors) {
+  if (!authors) return "";
+  if (Array.isArray(authors)) return authors.join(" ");
+  return String(authors);
+}
+
+function librarySearchText(item) {
+  const metadata = item.metadata || {};
+  const conceptLabels = (item.concepts || []).map((c) => c.label || "").join(" ");
+  const argumentTexts = (item.arguments || []).map((a) => a.text || "").join(" ");
+  return [
+    metadata.title || "",
+    flattenAuthors(metadata.authors),
+    metadata.doi || "",
+    metadata.venue || "",
+    metadata.year || "",
+    conceptLabels,
+    argumentTexts,
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+function applyLibraryFilter(query) {
+  const q = (query || "").trim().toLowerCase();
+  const items = state.library.items || [];
+  state.library.filtered = q
+    ? items.filter((item) => librarySearchText(item).includes(q))
+    : items.slice();
+
+  if (
+    state.library.selectedId &&
+    !state.library.filtered.find((item) => item.paper_id === state.library.selectedId)
+  ) {
+    state.library.selectedId = null;
+  }
+
+  renderLibraryTable();
+  renderLibraryGraph();
+  renderLibraryDetail();
+}
+
+function renderLibraryTable() {
+  const tbody = el("libraryTableBody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  if (!state.library.filtered.length) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 5;
+    cell.className = "muted";
+    cell.textContent = "No papers found.";
+    row.appendChild(cell);
+    tbody.appendChild(row);
+    return;
+  }
+
+  state.library.filtered.forEach((item) => {
+    const row = document.createElement("tr");
+    if (state.library.selectedId === item.paper_id) row.classList.add("active");
+
+    const title = item.metadata?.title || "Untitled";
+    const year = item.metadata?.year || "-";
+    const venue = item.metadata?.venue || "-";
+    const conceptCount = item.concepts?.length || 0;
+    const argumentCount = item.arguments?.length || 0;
+
+    row.innerHTML = `
+      <td>${title}</td>
+      <td>${year}</td>
+      <td>${venue}</td>
+      <td>${conceptCount}</td>
+      <td>${argumentCount}</td>
+    `;
+    row.addEventListener("click", () => selectLibraryItem(item.paper_id));
+    tbody.appendChild(row);
+  });
+}
+
+function renderLibraryGraph() {
+  const svg = el("graphSvg");
+  if (!svg) return;
+  svg.innerHTML = "";
+  svg.setAttribute("viewBox", "0 0 800 420");
+
+  const items = state.library.filtered || [];
+  const count = items.length;
+  const selected = items.find((item) => item.paper_id === state.library.selectedId);
+  if (selected) {
+    renderPaperFocusedGraph(svg, selected);
+    return;
+  }
+  if (count === 0) {
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.setAttribute("x", "20");
+    text.setAttribute("y", "40");
+    text.setAttribute("fill", "#6b6157");
+    text.textContent = "No papers found.";
+    svg.appendChild(text);
+    return;
+  }
+
+  const width = 800;
+  const height = 420;
+  const cx = width / 2;
+  const cy = height / 2;
+  const radius = Math.min(width, height) / 2 - 60;
+
+  const positions = items.map((item, idx) => {
+    const angle = (2 * Math.PI * idx) / count;
+    return {
+      id: item.paper_id,
+      x: cx + radius * Math.cos(angle),
+      y: cy + radius * Math.sin(angle),
+      label: (item.metadata?.title || "Untitled").slice(0, 18),
+    };
+  });
+
+  for (let i = 0; i < positions.length - 1; i += 1) {
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", positions[i].x);
+    line.setAttribute("y1", positions[i].y);
+    line.setAttribute("x2", positions[i + 1].x);
+    line.setAttribute("y2", positions[i + 1].y);
+    line.setAttribute("stroke", "#d0c6bd");
+    line.setAttribute("stroke-width", "1");
+    svg.appendChild(line);
+  }
+
+  positions.forEach((pos) => {
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("cx", pos.x);
+    circle.setAttribute("cy", pos.y);
+    circle.setAttribute("r", "18");
+    circle.classList.add("graph-node");
+    if (state.library.selectedId === pos.id) circle.classList.add("active");
+    circle.addEventListener("click", () => selectLibraryItem(pos.id));
+
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    label.setAttribute("x", pos.x);
+    label.setAttribute("y", pos.y + 32);
+    label.setAttribute("text-anchor", "middle");
+    label.classList.add("graph-label");
+    label.textContent = pos.label;
+
+    group.appendChild(circle);
+    group.appendChild(label);
+    svg.appendChild(group);
+  });
+}
+
+function buildArgumentGroups(item) {
+  const groups = {
+    Argument: [],
+    Idea: [],
+    Issue: [],
+    Backing: [],
+    Approach: [],
+    Evidence: [],
+    Claim: [],
+    Warrant: [],
+    Assumption: [],
+    Artifact: [],
+  };
+
+  (item.arguments || []).forEach((arg) => {
+    const type = normalizeArgType(arg.arg_type);
+    const entry = { kind: "argument", id: arg.argument_id, label: arg.argument_id, data: arg };
+    if (type === "idea") groups.Idea.push(entry);
+    else if (type === "issue") groups.Issue.push(entry);
+    else if (type === "backing") groups.Backing.push(entry);
+    else if (type === "approach") groups.Approach.push(entry);
+    else if (type === "claim" || type === "central argument") groups.Claim.push(entry);
+    else if (type === "warrant") groups.Warrant.push(entry);
+    else if (type === "evidence" || type === "result" || type.startsWith("experiment")) groups.Evidence.push(entry);
+  });
+
+  (item.concepts || []).forEach((concept) => {
+    const type = String(concept.type || "").toLowerCase();
+    const entry = { kind: "concept", id: concept.concept_id, label: concept.concept_id, data: concept };
+    if (type.includes("assumption")) groups.Assumption.push(entry);
+    if (type.includes("artifact")) groups.Artifact.push(entry);
+  });
+
+  return groups;
+}
+
+function renderPaperFocusedGraph(svg, item) {
+  const width = 800;
+  const height = 520;
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+  const groups = buildArgumentGroups(item);
+  const positionCache = state.library.graphPositions;
+
+  const nodes = [
+    { id: "Work", label: "Work", type: "paper", r: 22, fx: 520, fy: 70 },
+    { id: "Argument", label: "Argument", type: "class", r: 20, fx: 500, fy: 150 },
+    { id: "Idea", label: "Idea", type: "class", r: 18, fx: 200, fy: 170 },
+    { id: "Issue", label: "Issue", type: "class", r: 18, fx: 220, fy: 270 },
+    { id: "Backing", label: "Backing", type: "class", r: 16, fx: 320, fy: 340 },
+    { id: "Approach", label: "Approach", type: "class", r: 18, fx: 440, fy: 380 },
+    { id: "Artifact", label: "Artifact", type: "class", r: 14, fx: 360, fy: 470 },
+    { id: "Assumption", label: "Assumption", type: "class", r: 14, fx: 520, fy: 470 },
+    { id: "Evidence", label: "Evidence", type: "class", r: 16, fx: 600, fy: 360 },
+    { id: "Claim", label: "Claim", type: "class", r: 16, fx: 660, fy: 300 },
+    { id: "Warrant", label: "Warrant", type: "class", r: 16, fx: 660, fy: 190 },
+  ];
+
+  nodes.forEach((node) => {
+    if (node.fx != null && node.x == null) {
+      node.x = node.fx;
+      node.y = node.fy;
+    }
+  });
+
+  const links = [
+    { source: "Work", target: "Argument", label: "contains", distance: 90 },
+    { source: "Argument", target: "Idea", label: "proposesIdea", distance: 140 },
+    { source: "Argument", target: "Issue", label: "concernsIssue", distance: 140 },
+    { source: "Idea", target: "Issue", label: "responseTo", distance: 140 },
+    { source: "Argument", target: "Backing", label: "hasBacking", distance: 160 },
+    { source: "Argument", target: "Approach", label: "realizes", distance: 120 },
+    { source: "Argument", target: "Evidence", label: "hasEvidence", distance: 150 },
+    { source: "Approach", target: "Evidence", label: "generates", distance: 120 },
+    { source: "Argument", target: "Claim", label: "hasClaim", distance: 150 },
+    { source: "Evidence", target: "Claim", label: "proves", distance: 120 },
+    { source: "Argument", target: "Warrant", label: "hasWarrant", distance: 150 },
+    { source: "Warrant", target: "Claim", label: "leadTo", distance: 120 },
+    { source: "Approach", target: "Assumption", label: "hasAssumption", distance: 120 },
+    { source: "Approach", target: "Artifact", label: "uses", distance: 120 },
+    { source: "Approach", target: "Artifact", label: "introduce", distance: 120 },
+  ];
+
+  nodes.forEach((node) => {
+    const instances = groups[node.id] || [];
+    if (!instances.length || !state.library.expanded.has(node.id)) return;
+    const parent = nodes.find((n) => n.id === node.id);
+    instances.forEach((inst, idx) => {
+      const angle = (2 * Math.PI * idx) / Math.max(instances.length, 1);
+      const radius = 26;
+      const offsetX = radius * Math.cos(angle);
+      const offsetY = radius * Math.sin(angle);
+      nodes.push({
+        id: `${node.id}:${inst.id}`,
+        label: inst.label,
+        type: "instance",
+        r: 12,
+        parent: node.id,
+        parentRef: parent,
+        instance: inst,
+        offsetX,
+        offsetY,
+        x: parent ? parent.fx + offsetX : undefined,
+        y: parent ? parent.fy + offsetY : undefined,
+        fx: parent ? parent.fx + offsetX : undefined,
+        fy: parent ? parent.fy + offsetY : undefined,
+      });
+      links.push({
+        source: node.id,
+        target: `${node.id}:${inst.id}`,
+        label: "",
+        distance: 30,
+      });
+    });
+  });
+
+  nodes.forEach((node) => {
+    if (node.type === "instance") return;
+    const cached = positionCache[node.id];
+    if (cached) {
+      node.x = cached.x;
+      node.y = cached.y;
+    }
+  });
+
+  const svgSel = window.d3.select(svg);
+  svgSel.selectAll("*").remove();
+
+  svgSel
+    .append("rect")
+    .attr("x", 0)
+    .attr("y", 0)
+    .attr("width", width)
+    .attr("height", height)
+    .attr("fill", "transparent")
+    .on("click", () => {
+      state.library.selectedId = null;
+      state.library.selectedInstance = null;
+      state.library.expanded = new Set();
+      renderLibraryGraph();
+      renderLibraryTable();
+      renderLibraryDetail();
+    });
+
+  svgSel
+    .append("text")
+    .attr("x", 20)
+    .attr("y", 28)
+    .attr("fill", "#1e1b16")
+    .attr("font-size", "14")
+    .text((item.metadata?.title || "Selected Paper").slice(0, 80));
+
+  svgSel
+    .append("text")
+    .attr("x", 20)
+    .attr("y", 46)
+    .attr("fill", "#6b6157")
+    .attr("font-size", "11")
+    .text("Click background to return to paper graph");
+
+  const defs = svgSel.append("defs");
+  defs
+    .append("marker")
+    .attr("id", "arrowhead")
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 10)
+    .attr("refY", 0)
+    .attr("markerWidth", 6)
+    .attr("markerHeight", 6)
+    .attr("orient", "auto")
+    .attr("markerUnits", "userSpaceOnUse")
+    .append("path")
+    .attr("d", "M0,-5L10,0L0,5")
+    .attr("fill", "#d0c6bd");
+
+  const link = svgSel
+    .append("g")
+    .attr("stroke", "#d0c6bd")
+    .selectAll("line")
+    .data(links)
+    .join("line")
+    .attr("stroke-width", 1.2)
+    .attr("marker-end", "url(#arrowhead)");
+
+  const linkLabel = svgSel
+    .append("g")
+    .selectAll("text")
+    .data(links.filter((l) => l.label))
+    .join("text")
+    .attr("class", "graph-edge-label")
+    .text((d) => d.label);
+
+  const node = svgSel
+    .append("g")
+    .selectAll("g")
+    .data(nodes)
+    .join("g")
+    .style("cursor", (d) => (d.type === "class" || d.type === "instance" ? "pointer" : "default"))
+    .call(
+      window.d3
+        .drag()
+        .on("start", (event, d) => {
+          if (!event.active) simulation.alphaTarget(0.3).restart();
+          d.fx = d.x;
+          d.fy = d.y;
+        })
+        .on("drag", (event, d) => {
+          d.fx = event.x;
+          d.fy = event.y;
+        })
+        .on("end", (event, d) => {
+          if (!event.active) simulation.alphaTarget(0);
+          if (d.type !== "paper" && d.type !== "class" && d.type !== "instance") {
+            d.fx = null;
+            d.fy = null;
+          }
+        })
+    );
+
+  node.on("click", (event, d) => {
+    event.stopPropagation();
+    if (d.type === "instance") {
+      state.library.selectedInstance = { kind: d.instance.kind, id: d.instance.id };
+      renderLibraryDetail();
+      renderLibraryGraph();
+      return;
+    }
+    if (d.type === "class") {
+      toggleGraphGroup(d.id);
+    }
+  });
+
+  node
+    .append("circle")
+    .attr("r", (d) => d.r)
+    .attr("class", (d) => {
+      if (d.type === "paper") return "graph-node paper-node";
+      if (d.type === "instance") return "graph-node small-node";
+      const hasInstances = (groups[d.id] || []).length > 0;
+      return `graph-node${hasInstances ? "" : " empty"}${state.library.expanded.has(d.id) ? " active" : ""}`;
+    });
+
+  node
+    .append("text")
+    .attr("class", "graph-label")
+    .attr("text-anchor", "middle")
+    .attr("dy", 4)
+    .text((d) => d.label);
+
+  const simulation = window.d3
+    .forceSimulation(nodes)
+    .force(
+      "link",
+      window.d3.forceLink(links).id((d) => d.id).distance((d) => d.distance || 120)
+    )
+    .force(
+      "charge",
+      window.d3.forceManyBody().strength((d) => (d.type === "instance" ? 0 : -180))
+    )
+    .force("instance-link", window.d3.forceLink(links.filter((l) => l.label === "")).id((d) => d.id).distance(35).strength(0.9))
+    .force("center", window.d3.forceCenter(width / 2, height / 2))
+    .force("collision", window.d3.forceCollide().radius((d) => d.r + 6))
+    .alpha(0.2)
+    .alphaDecay(0.2)
+    .on("tick", () => {
+      nodes.forEach((d) => {
+        if (d.type !== "instance" || !d.parentRef) return;
+        const parentX = d.parentRef.x ?? d.parentRef.fx ?? d.x;
+        const parentY = d.parentRef.y ?? d.parentRef.fy ?? d.y;
+        d.fx = parentX + d.offsetX;
+        d.fy = parentY + d.offsetY;
+        d.x = d.fx;
+        d.y = d.fy;
+      });
+      link
+        .attr("x1", (d) => {
+          const r = d.source.r || 0;
+          const dx = d.target.x - d.source.x;
+          const dy = d.target.y - d.source.y;
+          const len = Math.hypot(dx, dy) || 1;
+          return d.source.x + (dx / len) * r;
+        })
+        .attr("y1", (d) => {
+          const r = d.source.r || 0;
+          const dx = d.target.x - d.source.x;
+          const dy = d.target.y - d.source.y;
+          const len = Math.hypot(dx, dy) || 1;
+          return d.source.y + (dy / len) * r;
+        })
+        .attr("x2", (d) => {
+          const r = d.target.r || 0;
+          const dx = d.target.x - d.source.x;
+          const dy = d.target.y - d.source.y;
+          const len = Math.hypot(dx, dy) || 1;
+          return d.target.x - (dx / len) * (r + 4);
+        })
+        .attr("y2", (d) => {
+          const r = d.target.r || 0;
+          const dx = d.target.x - d.source.x;
+          const dy = d.target.y - d.source.y;
+          const len = Math.hypot(dx, dy) || 1;
+          return d.target.y - (dy / len) * (r + 4);
+        });
+
+      linkLabel
+        .attr("x", (d) => (d.source.x + d.target.x) / 2)
+        .attr("y", (d) => (d.source.y + d.target.y) / 2 - 6);
+
+      node.attr("transform", (d) => `translate(${d.x}, ${d.y})`);
+
+      nodes.forEach((d) => {
+        d.x = Math.max(40, Math.min(width - 40, d.x));
+        d.y = Math.max(40, Math.min(height - 40, d.y));
+        if (d.type !== "instance") {
+          positionCache[d.id] = { x: d.x, y: d.y };
+        }
+      });
+    });
+}
+
+function drawNode(svg, x, y, label, className, onClick) {
+  const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  circle.setAttribute("cx", x);
+  circle.setAttribute("cy", y);
+  circle.setAttribute("r", className.includes("small-node") ? "16" : "20");
+  circle.setAttribute("class", className);
+  if (onClick) {
+    circle.addEventListener("click", (event) => {
+      event.stopPropagation();
+      onClick();
+    });
+  }
+
+  const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  text.setAttribute("x", x);
+  text.setAttribute("y", y + 4);
+  text.setAttribute("text-anchor", "middle");
+  text.setAttribute("class", "graph-label");
+  text.textContent = label;
+
+  group.appendChild(circle);
+  group.appendChild(text);
+  svg.appendChild(group);
+}
+
+function drawEdge(svg, x1, y1, x2, y2, label, offset = -6) {
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", x1);
+  line.setAttribute("y1", y1);
+  line.setAttribute("x2", x2);
+  line.setAttribute("y2", y2);
+  line.setAttribute("stroke", "#d0c6bd");
+  line.setAttribute("stroke-width", "1.2");
+  svg.appendChild(line);
+
+  if (label) {
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.setAttribute("x", (x1 + x2) / 2);
+    text.setAttribute("y", (y1 + y2) / 2 + offset);
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("class", "graph-edge-label");
+    text.textContent = label;
+    svg.appendChild(text);
+  }
+}
+
+function toggleGraphGroup(groupId) {
+  if (state.library.expanded.has(groupId)) {
+    state.library.expanded.delete(groupId);
+    if (state.library.selectedInstance) {
+      const current = state.library.selectedInstance.id;
+      const isInGroup = (buildArgumentGroups(state.library.filtered.find((item) => item.paper_id === state.library.selectedId))[
+        groupId
+      ] || []).some((inst) => inst.id === current);
+      if (isInGroup) {
+        state.library.selectedInstance = null;
+      }
+    }
+  } else {
+    state.library.expanded.add(groupId);
+  }
+  renderLibraryGraph();
+  renderLibraryDetail();
+}
+
+function renderInstanceNodes(svg, parentNode, instances) {
+  if (!instances.length) return;
+  const radius = 45;
+  instances.forEach((inst, idx) => {
+    const angle = (2 * Math.PI * idx) / instances.length;
+    const x = parentNode.x + radius * Math.cos(angle);
+    const y = parentNode.y + radius * Math.sin(angle);
+    const isSelected =
+      state.library.selectedInstance?.id === inst.id &&
+      state.library.selectedInstance?.kind === inst.kind;
+
+    const nodeClass = `graph-node small-node${isSelected ? " active" : ""}`;
+    drawNode(svg, x, y, inst.label, nodeClass, () => {
+      state.library.selectedInstance = { kind: inst.kind, id: inst.id };
+      renderLibraryDetail();
+      renderLibraryGraph();
+    });
+    drawEdge(svg, parentNode.x, parentNode.y, x, y);
+  });
+}
+
+function renderLibraryDetail() {
+  const container = el("libraryDetailBody");
+  if (!container) return;
+  container.innerHTML = "";
+
+  const selected = state.library.filtered.find((item) => item.paper_id === state.library.selectedId);
+  if (!selected) {
+    container.innerHTML = '<div class="muted">Select a paper to view details.</div>';
+    return;
+  }
+
+  if (state.library.selectedInstance) {
+    const inst = state.library.selectedInstance;
+    const block = document.createElement("div");
+    block.className = "list-block";
+    block.innerHTML = `<div class="subhead">Selected Node</div>`;
+    const info = document.createElement("div");
+    info.className = "stack";
+    if (inst.kind === "argument") {
+      const arg = (selected.arguments || []).find((a) => a.argument_id === inst.id);
+      if (arg) {
+        const fields = [
+          { label: "Class", value: formatTypeLabel(arg.arg_type || "") },
+          { label: "Label", value: arg.text || "-" },
+          { label: "Description", value: arg.description || "-" },
+          {
+            label: "Concept refs",
+            value: Array.isArray(arg.concept_refs) && arg.concept_refs.length
+              ? arg.concept_refs.join(", ")
+              : "",
+          },
+          {
+            label: "Source refs",
+            value: Array.isArray(arg.source_refs) && arg.source_refs.length
+              ? arg.source_refs.map((ref) => ref.section || "Section").join(", ")
+              : "",
+          },
+        ];
+
+        const header = document.createElement("div");
+        header.innerHTML = `<strong>${arg.argument_id}</strong>`;
+        info.appendChild(header);
+
+        fields.forEach((field) => {
+          if (!field.value) return;
+          const label = document.createElement("div");
+          label.innerHTML = `<strong>${field.label}</strong>`;
+          const value = document.createElement("div");
+          value.className = "meta";
+          value.textContent = field.value;
+          info.appendChild(label);
+          info.appendChild(value);
+        });
+
+        const updated = document.createElement("details");
+        updated.innerHTML = `
+          <summary class="meta">Last updated</summary>
+          <div class="meta">${selected.updated_at || selected.annotation?.updated_at || "-"}</div>
+        `;
+        const annotator = document.createElement("details");
+        annotator.innerHTML = `
+          <summary class="meta">Annotator</summary>
+          <div class="meta">${selected.metadata?.annotator || "-"}</div>
+        `;
+        info.appendChild(updated);
+        info.appendChild(annotator);
+      }
+    } else if (inst.kind === "concept") {
+      const concept = (selected.concepts || []).find((c) => c.concept_id === inst.id);
+      if (concept) {
+        const fields = [
+          { label: "Class", value: concept.type || "-" },
+          { label: "Label", value: concept.label || "-" },
+          {
+            label: "Aliases",
+            value: Array.isArray(concept.aliases) && concept.aliases.length
+              ? concept.aliases.join(", ")
+              : "",
+          },
+          {
+            label: "Source refs",
+            value: Array.isArray(concept.source_refs) && concept.source_refs.length
+              ? concept.source_refs.map((ref) => ref.section || "Section").join(", ")
+              : "",
+          },
+        ];
+
+        const header = document.createElement("div");
+        header.innerHTML = `<strong>${concept.concept_id}</strong>`;
+        info.appendChild(header);
+
+        fields.forEach((field) => {
+          if (!field.value) return;
+          const label = document.createElement("div");
+          label.innerHTML = `<strong>${field.label}</strong>`;
+          const value = document.createElement("div");
+          value.className = "meta";
+          value.textContent = field.value;
+          info.appendChild(label);
+          info.appendChild(value);
+        });
+
+        const updated = document.createElement("details");
+        updated.innerHTML = `
+          <summary class="meta">Last updated</summary>
+          <div class="meta">${selected.updated_at || selected.annotation?.updated_at || "-"}</div>
+        `;
+        const annotator = document.createElement("details");
+        annotator.innerHTML = `
+          <summary class="meta">Annotator</summary>
+          <div class="meta">${selected.metadata?.annotator || "-"}</div>
+        `;
+        info.appendChild(updated);
+        info.appendChild(annotator);
+      }
+    }
+    if (!info.innerHTML) {
+      info.textContent = "Details unavailable.";
+    }
+    block.appendChild(info);
+    container.appendChild(block);
+    return;
+  }
+
+  const metadata = selected.metadata || {};
+  const details = document.createElement("div");
+  details.className = "stack";
+  details.innerHTML = `
+    <div><strong>${metadata.title || "Untitled"}</strong></div>
+    <div class="meta">${flattenAuthors(metadata.authors) || "Unknown authors"}</div>
+    <div class="meta">Year: ${metadata.year || "-"}</div>
+    <div class="meta">Venue: ${metadata.venue || "-"}</div>
+    <div class="meta">DOI: ${metadata.doi || "-"}</div>
+  `;
+  container.appendChild(details);
+
+  const conceptBlock = document.createElement("div");
+  conceptBlock.className = "list-block";
+  conceptBlock.innerHTML = `<div class="subhead">Concepts</div>`;
+  const conceptList = document.createElement("div");
+  conceptList.className = "list";
+  (selected.concepts || []).forEach((concept) => {
+    const item = document.createElement("div");
+    item.className = "list-item";
+    item.innerHTML = `
+      <div>
+        <div><strong>${concept.concept_id}</strong> ${concept.label || ""}</div>
+        <div class="meta">${concept.type || ""}</div>
+      </div>
+    `;
+    conceptList.appendChild(item);
+  });
+  if (!selected.concepts?.length) {
+    conceptList.innerHTML = '<div class="muted">No concepts recorded.</div>';
+  }
+  conceptBlock.appendChild(conceptList);
+  container.appendChild(conceptBlock);
+
+  const argumentBlock = document.createElement("div");
+  argumentBlock.className = "list-block";
+  argumentBlock.innerHTML = `<div class="subhead">Arguments</div>`;
+  const argumentList = document.createElement("div");
+  argumentList.className = "list";
+  (selected.arguments || []).forEach((argument) => {
+    const item = document.createElement("div");
+    item.className = "list-item";
+    item.innerHTML = `
+      <div>
+        <div><strong>${argument.argument_id}</strong> ${formatTypeLabel(argument.arg_type || "")}</div>
+        <div class="meta">${argument.text ? argument.text.slice(0, 120) : ""}</div>
+      </div>
+    `;
+    argumentList.appendChild(item);
+  });
+  if (!selected.arguments?.length) {
+    argumentList.innerHTML = '<div class="muted">No arguments recorded.</div>';
+  }
+  argumentBlock.appendChild(argumentList);
+  container.appendChild(argumentBlock);
+}
+
+function selectLibraryItem(paperId) {
+  state.library.selectedId = paperId;
+  state.library.expanded = new Set();
+  state.library.selectedInstance = null;
+  renderLibraryTable();
+  renderLibraryGraph();
+  renderLibraryDetail();
+}
+
+async function fetchLibrary() {
+  const res = await fetch(withBase("/api/papers"));
+  if (!res.ok) {
+    showToast("Failed to load paper library.", "error");
+    return;
+  }
+  const data = await res.json();
+  state.library.items = data.items || [];
+  state.library.loaded = true;
+  applyLibraryFilter(el("librarySearch")?.value || "");
+}
+
+function wireLibraryControls() {
+  const searchInput = el("librarySearch");
+  if (searchInput) {
+    searchInput.addEventListener("input", (e) => applyLibraryFilter(e.target.value));
+  }
+
+  document.querySelectorAll(".view-toggle .toggle").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".view-toggle .toggle").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      state.library.view = btn.dataset.view;
+      document.querySelectorAll(".library-view").forEach((view) => view.classList.remove("active"));
+      if (state.library.view === "graph") {
+        el("libraryGraphView")?.classList.add("active");
+      } else {
+        el("libraryTableView")?.classList.add("active");
+      }
+      renderLibraryGraph();
+    });
   });
 }
 
@@ -721,30 +1532,27 @@ function renderHighlightPickers() {
     }
 
     available.forEach((hl) => {
-      const row = document.createElement("label");
-      row.className = "highlight-entry";
+      const row = document.createElement("div");
+      const selected = state.highlightSelection[key].has(hl.id);
+      row.className = `highlight-pill ${selected ? "selected" : ""}`;
+      row.title = `Section: ${hl.section}${hl.page ? ` - Page ${hl.page}` : ""}`;
 
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.checked = state.highlightSelection[key].has(hl.id);
-      checkbox.addEventListener("change", (e) => {
-        if (e.target.checked) {
-          state.highlightSelection[key].add(hl.id);
-        } else {
-          state.highlightSelection[key].delete(hl.id);
-        }
-      });
-
-      const text = document.createElement("div");
+      const text = document.createElement("span");
+      text.className = "highlight-pill-text";
       text.textContent = hl.text;
 
-      const meta = document.createElement("div");
-      meta.className = "meta";
-      meta.textContent = `Section: ${hl.section}${hl.page ? ` - Page ${hl.page}` : ""}`;
-
-      row.appendChild(checkbox);
       row.appendChild(text);
-      row.appendChild(meta);
+      row.addEventListener("click", () => {
+        if (state.highlightSelection[key].has(hl.id)) {
+          state.highlightSelection[key].delete(hl.id);
+          row.classList.remove("selected");
+        } else {
+          state.highlightSelection[key].add(hl.id);
+          row.classList.add("selected");
+        }
+        updateDescription(key);
+      });
+
       container.appendChild(row);
     });
   });
@@ -756,6 +1564,9 @@ function removeHighlight(id) {
     mark.replaceWith(document.createTextNode(mark.textContent));
   }
   state.highlights = state.highlights.filter((h) => h.id !== id);
+  state.highlightSelection.concept.delete(id);
+  state.highlightSelection.argument.delete(id);
+  updateDescription("argument");
 }
 
 function consumeHighlights(ids) {
@@ -763,9 +1574,12 @@ function consumeHighlights(ids) {
     const hl = state.highlights.find((h) => h.id === id);
     if (!hl) return;
     hl.used = true;
+    state.highlightSelection.concept.delete(id);
+    state.highlightSelection.argument.delete(id);
     const mark = document.querySelector(`mark[data-hid="${id}"]`);
     if (mark) mark.classList.add("used");
   });
+  updateDescription("argument");
 }
 
 function renderConceptList() {
@@ -850,13 +1664,20 @@ function renderArgumentConceptRefs() {
   }
 
   state.annotations.concepts.forEach((concept) => {
-    const label = document.createElement("label");
-    label.className = "tag";
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.value = concept.concept_id;
-    label.appendChild(checkbox);
-    label.append(` ${concept.concept_id} ${concept.label}`);
+    const label = document.createElement("div");
+    label.className = "ref-pill";
+
+    const text = document.createElement("span");
+    text.textContent = `${concept.concept_id} ${concept.label}`;
+    label.dataset.conceptId = concept.concept_id;
+    label.dataset.selected = "false";
+
+    label.appendChild(text);
+    label.addEventListener("click", () => {
+      label.classList.toggle("selected");
+      label.dataset.selected = label.classList.contains("selected") ? "true" : "false";
+    });
+
     container.appendChild(label);
   });
 }
@@ -914,10 +1735,18 @@ function addHighlight() {
       used: false,
     });
 
+    state.highlightSelection.argument.add(id);
+    state.highlightSelection.concept.add(id);
+    updateDescription("argument");
+
     const activeTab = document.querySelector(".tab.active")?.dataset.tab;
     if (activeTab === "argument") {
-      state.highlightSelection.argument.add(id);
       requestNormalization(text);
+    } else if (activeTab === "concept") {
+      const labelInput = el("conceptLabel");
+      if (labelInput && !labelInput.value.trim()) {
+        labelInput.value = text;
+      }
     }
 
     selection.removeAllRanges();
@@ -943,11 +1772,6 @@ function createConcept() {
     return;
   }
   const type = typePath.join(" > ");
-  const roles = Array.from(document.querySelectorAll(".roles input:checked")).map((input) => input.value);
-  if (roles.length === 0) {
-    showToast("Select at least one role.", "error");
-    return;
-  }
 
   const sourceRefs = Array.from(state.highlightSelection.concept).map((id) => {
     const hl = state.highlights.find((h) => h.id === id);
@@ -960,7 +1784,6 @@ function createConcept() {
     label,
     aliases: aliases.length ? aliases : undefined,
     type,
-    roles,
     source_refs: sourceRefs.length ? sourceRefs : undefined,
   };
 
@@ -988,8 +1811,8 @@ function createArgument() {
   }
 
   const argType = el("argumentType").value;
-  const conceptRefs = Array.from(el("argumentConceptRefs").querySelectorAll("input:checked")).map(
-    (input) => input.value
+  const conceptRefs = Array.from(el("argumentConceptRefs").querySelectorAll(".ref-pill.selected")).map(
+    (pill) => pill.dataset.conceptId
   );
 
   const sourceRefs = Array.from(state.highlightSelection.argument).map((id) => {
@@ -1002,6 +1825,7 @@ function createArgument() {
     argument_id: uniqueId("A", state.annotations.arguments),
     text,
     arg_type: argType,
+    description: el("argumentDescription").value.trim() || undefined,
     concept_refs: conceptRefs.length ? conceptRefs : undefined,
     source_refs: sourceRefs.length ? sourceRefs : undefined,
   };
@@ -1009,8 +1833,11 @@ function createArgument() {
   state.annotations.arguments.push(argument);
   consumeHighlights(Array.from(state.highlightSelection.argument));
   el("argumentText").value = "";
+  el("argumentDescription").value = "";
   state.highlightSelection.argument.clear();
-  el("argumentConceptRefs").querySelectorAll("input").forEach((input) => (input.checked = false));
+  el("argumentConceptRefs")
+    .querySelectorAll(".ref-pill")
+    .forEach((pill) => pill.classList.remove("selected"));
 
   renderArgumentList();
   renderHighlightPickers();
@@ -1039,6 +1866,7 @@ async function uploadPdf() {
 
   const data = await res.json();
   state.paperId = data.paper_id;
+  state.pdfHash = data.pdf_hash || "";
   state.metadata = data.metadata || {};
   state.doc = data.doc;
   state.teiXml = data.tei_xml || "";
@@ -1061,8 +1889,13 @@ async function uploadPdf() {
   renderConceptTypePicker();
   renderConceptTypePath();
   renderFlowGuide();
+  updateDescription("argument");
   if (loadingToast) loadingToast.remove();
-  showToast("Paper loaded and ready to annotate.", "success");
+  if (data.existing) {
+    showToast("Existing annotation loaded for this paper.", "success");
+  } else {
+    showToast("Paper loaded and ready to annotate.", "success");
+  }
 }
 
 function validateRequiredArguments() {
@@ -1095,6 +1928,7 @@ async function submitAnnotations() {
     concepts: state.annotations.concepts,
     arguments: state.annotations.arguments,
     created_at: state.annotations.created_at,
+    pdf_hash: state.pdfHash,
   };
 
   const savingToast = showToast("Saving annotations...", "loading", { persist: true });
@@ -1131,6 +1965,9 @@ function wireNavigation() {
       button.classList.add("active");
       const target = document.getElementById(button.dataset.page);
       if (target) target.classList.add("active");
+      if (button.dataset.page === "libraryPage" && !state.library.loaded) {
+        fetchLibrary();
+      }
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
   });
@@ -1148,8 +1985,10 @@ function init() {
   renderConceptTypePicker();
   renderConceptTypePath();
   renderFlowGuide();
+  updateDescription("argument");
   wireTabs();
   wireNavigation();
+  wireLibraryControls();
 
   el("paperInfo").textContent = "Files will save under dataset/papers/";
 
