@@ -484,6 +484,13 @@ function renderPaperFocusedGraph(svg, item) {
     { id: "Warrant", label: "Warrant", type: "class", r: 16, fx: 660, fy: 190 },
   ];
 
+  nodes.forEach((node) => {
+    if (node.fx != null && node.x == null) {
+      node.x = node.fx;
+      node.y = node.fy;
+    }
+  });
+
   const links = [
     { source: "Work", target: "Argument", label: "contains", distance: 90 },
     { source: "Argument", target: "Idea", label: "proposesIdea", distance: 140 },
@@ -505,33 +512,38 @@ function renderPaperFocusedGraph(svg, item) {
   nodes.forEach((node) => {
     const instances = groups[node.id] || [];
     if (!instances.length || !state.library.expanded.has(node.id)) return;
+    const parent = nodes.find((n) => n.id === node.id);
     instances.forEach((inst, idx) => {
-      const parent = nodes.find((n) => n.id === node.id);
-      const baseAngle = parent?.fy && parent.fy > height * 0.7 ? -Math.PI / 2 : Math.PI / 2;
-      const spread = Math.PI / 2;
-      const angle =
-        baseAngle + (spread * (idx - (instances.length - 1) / 2)) / Math.max(instances.length, 1);
-      const radius = 28;
+      const angle = (2 * Math.PI * idx) / Math.max(instances.length, 1);
+      const radius = 26;
+      const offsetX = radius * Math.cos(angle);
+      const offsetY = radius * Math.sin(angle);
       nodes.push({
         id: `${node.id}:${inst.id}`,
         label: inst.label,
         type: "instance",
         r: 12,
         parent: node.id,
+        parentRef: parent,
         instance: inst,
-        x: parent ? parent.fx + radius * Math.cos(angle) : undefined,
-        y: parent ? parent.fy + radius * Math.sin(angle) : undefined,
+        offsetX,
+        offsetY,
+        x: parent ? parent.fx + offsetX : undefined,
+        y: parent ? parent.fy + offsetY : undefined,
+        fx: parent ? parent.fx + offsetX : undefined,
+        fy: parent ? parent.fy + offsetY : undefined,
       });
       links.push({
         source: node.id,
         target: `${node.id}:${inst.id}`,
         label: "",
-        distance: 38,
+        distance: 30,
       });
     });
   });
 
   nodes.forEach((node) => {
+    if (node.type === "instance") return;
     const cached = positionCache[node.id];
     if (cached) {
       node.x = cached.x;
@@ -669,7 +681,7 @@ function renderPaperFocusedGraph(svg, item) {
     )
     .force(
       "charge",
-      window.d3.forceManyBody().strength((d) => (d.type === "instance" ? -40 : -180))
+      window.d3.forceManyBody().strength((d) => (d.type === "instance" ? 0 : -180))
     )
     .force("instance-link", window.d3.forceLink(links.filter((l) => l.label === "")).id((d) => d.id).distance(35).strength(0.9))
     .force("center", window.d3.forceCenter(width / 2, height / 2))
@@ -677,6 +689,15 @@ function renderPaperFocusedGraph(svg, item) {
     .alpha(0.2)
     .alphaDecay(0.2)
     .on("tick", () => {
+      nodes.forEach((d) => {
+        if (d.type !== "instance" || !d.parentRef) return;
+        const parentX = d.parentRef.x ?? d.parentRef.fx ?? d.x;
+        const parentY = d.parentRef.y ?? d.parentRef.fy ?? d.y;
+        d.fx = parentX + d.offsetX;
+        d.fy = parentY + d.offsetY;
+        d.x = d.fx;
+        d.y = d.fy;
+      });
       link
         .attr("x1", (d) => {
           const r = d.source.r || 0;
@@ -716,7 +737,9 @@ function renderPaperFocusedGraph(svg, item) {
       nodes.forEach((d) => {
         d.x = Math.max(40, Math.min(width - 40, d.x));
         d.y = Math.max(40, Math.min(height - 40, d.y));
-        positionCache[d.id] = { x: d.x, y: d.y };
+        if (d.type !== "instance") {
+          positionCache[d.id] = { x: d.x, y: d.y };
+        }
       });
     });
 }
