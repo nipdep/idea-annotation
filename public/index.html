@@ -15,20 +15,36 @@
         <div class="app-title">Paper Annotator</div>
         <div class="app-subtitle">Named entities + canonical statements in one pass.</div>
       </div>
-      <div class="upload-bar">
-        <input type="file" id="pdfInput" accept="application/pdf" />
-        <button id="uploadBtn">Upload PDF</button>
-        <span id="paperInfo" class="muted"></span>
-      </div>
     </header>
 
     <main class="app-grid">
-      <section class="panel" id="metadataPanel">
+      <section class="panel sidebar" id="metadataPanel">
+        <div class="panel-header">
+          <h2>Paper</h2>
+        </div>
+        <div class="upload-card">
+          <div class="subhead">Upload PDF</div>
+          <div class="upload-bar">
+            <input type="file" id="pdfInput" accept="application/pdf" />
+            <button id="uploadBtn">Upload PDF</button>
+          </div>
+          <div id="paperInfo" class="muted"></div>
+        </div>
         <div class="panel-header">
           <h2>Metadata</h2>
           <button id="saveMetaBtn" class="ghost">Save</button>
         </div>
         <div id="metadataForm" class="stack"></div>
+
+        <div class="list-block">
+          <div class="subhead">Concepts</div>
+          <div id="conceptList" class="list"></div>
+        </div>
+
+        <div class="list-block">
+          <div class="subhead">Arguments</div>
+          <div id="argumentList" class="list"></div>
+        </div>
       </section>
 
       <section class="panel doc-panel">
@@ -96,15 +112,6 @@
           <button id="addArgumentBtn">Add Argument</button>
         </div>
 
-        <div class="list-block">
-          <div class="subhead">Concepts</div>
-          <div id="conceptList" class="list"></div>
-        </div>
-
-        <div class="list-block">
-          <div class="subhead">Arguments</div>
-          <div id="argumentList" class="list"></div>
-        </div>
       </section>
     </main>
 

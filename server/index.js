@@ -162,6 +162,7 @@ app.post("/api/annotation/:id", (req, res) => {
       paper_id: paperId,
       schema_version: "0.1",
       metadata: payload.metadata || {},
+      metadata_checks: payload.metadata_checks || {},
       concepts: payload.concepts || [],
       arguments: payload.arguments || [],
       updated_at: now,

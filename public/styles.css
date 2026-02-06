@@ -73,6 +73,16 @@ body {
   flex-wrap: wrap;
 }
 
+.upload-card {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  background: #fffaf2;
+  margin-bottom: 12px;
+}
+
 button {
   border: none;
   background: var(--accent);
@@ -119,9 +129,15 @@ textarea {
 
 .app-grid {
   display: grid;
-  grid-template-columns: 1fr 2fr 1.1fr;
+  grid-template-columns: 1.1fr 2.2fr 1.2fr;
   gap: 18px;
   padding: 12px 32px 32px;
+}
+
+.sidebar {
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  padding-right: 6px;
 }
 
 .panel {
@@ -155,6 +171,59 @@ textarea {
 .stack {
   display: grid;
   gap: 12px;
+}
+
+.meta-field {
+  display: grid;
+  gap: 6px;
+}
+
+.meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.verify {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.authors-block {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #fff;
+}
+
+.authors-block summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--accent-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.author-list {
+  margin-top: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+  display: grid;
+  gap: 6px;
+}
+
+.author-chip {
+  background: #f4efe8;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 0.85rem;
+  display: inline-block;
 }
 
 .doc-panel {
@@ -194,6 +263,10 @@ mark {
   background: #ffe7b3;
   padding: 0 2px;
   border-radius: 2px;
+}
+
+mark.used {
+  background: #bfe8c8;
 }
 
 .tab-bar {
@@ -287,13 +360,24 @@ mark {
   background: #fffaf2;
 }
 
+.highlight-entry.used {
+  opacity: 0.75;
+  border-style: solid;
+  background: #f0fbf2;
+}
+
 .highlight-entry input[type="text"] {
   width: 120px;
 }
 
-.missing input {
+.missing input,
+.missing textarea {
   border-color: #d98366;
   background: #fff0e8;
+}
+
+.missing summary {
+  color: #d06a4f;
 }
 
 @keyframes fadeIn {

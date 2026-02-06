@@ -21,6 +21,7 @@ const argumentTypes = [
 const state = {
   paperId: null,
   metadata: {},
+  metadataChecks: {},
   doc: null,
   annotations: { concepts: [], arguments: [], created_at: null },
   highlights: [],
@@ -53,35 +54,116 @@ function renderMetadata() {
   form.innerHTML = "";
   const fields = [
     { key: "title", label: "Title" },
-    { key: "authors", label: "Authors (comma-separated)" },
+    { key: "authors", label: "Authors" },
     { key: "doi", label: "DOI" },
     { key: "year", label: "Year" },
     { key: "venue", label: "Venue" },
   ];
 
   fields.forEach(({ key, label }) => {
-    const wrapper = document.createElement("label");
     const raw = state.metadata[key];
     const value = Array.isArray(raw) ? raw.join(", ") : raw || "";
     const isMissing = Array.isArray(raw) ? raw.length === 0 : !raw;
-    wrapper.className = isMissing ? "missing" : "";
-    wrapper.textContent = label;
 
-    const input = document.createElement("input");
-    input.value = Array.isArray(value) ? value.join(", ") : value;
-    input.addEventListener("input", (e) => {
-      const val = e.target.value;
-      if (key === "authors") {
-        const list = val.split(",").map((a) => a.trim()).filter(Boolean);
+    if (key === "authors") {
+      const details = document.createElement("details");
+      details.className = "authors-block";
+      details.open = false;
+
+      const summary = document.createElement("summary");
+      summary.textContent = `${label} (${Array.isArray(raw) ? raw.length : 0})`;
+
+      const verify = document.createElement("label");
+      verify.className = "verify";
+      const verifyBox = document.createElement("input");
+      verifyBox.type = "checkbox";
+      verifyBox.checked = !!state.metadataChecks[key];
+      verifyBox.addEventListener("change", (e) => {
+        state.metadataChecks[key] = e.target.checked;
+      });
+      verify.appendChild(verifyBox);
+      verify.append(" Verified");
+
+      summary.appendChild(verify);
+      details.appendChild(summary);
+
+      const listContainer = document.createElement("div");
+      listContainer.className = "author-list";
+      (Array.isArray(raw) ? raw : []).forEach((name) => {
+        const chip = document.createElement("span");
+        chip.className = "author-chip";
+        chip.textContent = name;
+        listContainer.appendChild(chip);
+      });
+
+      const textarea = document.createElement("textarea");
+      textarea.rows = 4;
+      textarea.placeholder = "Comma-separated";
+      textarea.value = value;
+      textarea.addEventListener("input", (e) => {
+        const list = e.target.value
+          .split(",")
+          .map((a) => a.trim())
+          .filter(Boolean);
         state.metadata[key] = list;
-        wrapper.className = list.length ? "" : "missing";
-      } else {
-        const trimmed = val.trim();
-        state.metadata[key] = trimmed;
-        wrapper.className = trimmed ? "" : "missing";
-      }
+        summary.textContent = `${label} (${list.length})`;
+        summary.appendChild(verify);
+        if (list.length === 0) {
+          details.classList.add("missing");
+        } else {
+          details.classList.remove("missing");
+        }
+        listContainer.innerHTML = "";
+        list.forEach((name) => {
+          const chip = document.createElement("span");
+          chip.className = "author-chip";
+          chip.textContent = name;
+          listContainer.appendChild(chip);
+        });
+      });
+
+      if (!isMissing) details.classList.remove("missing");
+      if (isMissing) details.classList.add("missing");
+
+      details.appendChild(textarea);
+      details.appendChild(listContainer);
+      form.appendChild(details);
+      return;
+    }
+
+    const wrapper = document.createElement("div");
+    wrapper.className = `meta-field ${isMissing ? "missing" : ""}`;
+
+    const row = document.createElement("div");
+    row.className = "meta-row";
+    const fieldLabel = document.createElement("div");
+    fieldLabel.textContent = label;
+
+    const verify = document.createElement("label");
+    verify.className = "verify";
+    const verifyBox = document.createElement("input");
+    verifyBox.type = "checkbox";
+    verifyBox.checked = !!state.metadataChecks[key];
+    verifyBox.addEventListener("change", (e) => {
+      state.metadataChecks[key] = e.target.checked;
+    });
+    verify.appendChild(verifyBox);
+    verify.append(" Verified");
+
+    row.appendChild(fieldLabel);
+    row.appendChild(verify);
+
+    const input =
+      key === "title" ? document.createElement("textarea") : document.createElement("input");
+    if (key === "title") input.rows = 3;
+    input.value = value;
+    input.addEventListener("input", (e) => {
+      const trimmed = e.target.value.trim();
+      state.metadata[key] = trimmed;
+      wrapper.className = `meta-field ${trimmed ? "" : "missing"}`;
     });
 
+    wrapper.appendChild(row);
     wrapper.appendChild(input);
     form.appendChild(wrapper);
   });
@@ -125,14 +207,14 @@ function renderHighlights() {
 
   state.highlights.forEach((hl) => {
     const item = document.createElement("div");
-    item.className = "highlight-entry";
+    item.className = `highlight-entry ${hl.used ? "used" : ""}`;
 
     const text = document.createElement("div");
     text.textContent = hl.text;
 
     const meta = document.createElement("div");
     meta.className = "meta";
-    meta.textContent = `Section: ${hl.section}`;
+    meta.textContent = `Section: ${hl.section}${hl.page ? ` - Page ${hl.page}` : ""}${hl.used ? " - Used" : ""}`;
 
     const pageInput = document.createElement("input");
     pageInput.type = "text";
@@ -146,7 +228,7 @@ function renderHighlights() {
     remove.className = "ghost";
     remove.textContent = "Remove";
     remove.addEventListener("click", () => {
-      state.highlights = state.highlights.filter((h) => h.id !== hl.id);
+      removeHighlight(hl.id);
       state.highlightSelection.concept.delete(hl.id);
       state.highlightSelection.argument.delete(hl.id);
       renderHighlights();
@@ -155,7 +237,7 @@ function renderHighlights() {
 
     item.appendChild(text);
     item.appendChild(meta);
-    item.appendChild(pageInput);
+    if (!hl.used) item.appendChild(pageInput);
     item.appendChild(remove);
     list.appendChild(item);
   });
@@ -171,12 +253,13 @@ function renderHighlightPickers() {
     const container = el(id);
     container.innerHTML = "";
 
-    if (state.highlights.length === 0) {
+    const available = state.highlights.filter((h) => !h.used);
+    if (available.length === 0) {
       container.innerHTML = '<div class="muted">No highlights to attach.</div>';
       return;
     }
 
-    state.highlights.forEach((hl) => {
+    available.forEach((hl) => {
       const row = document.createElement("label");
       row.className = "highlight-entry";
 
@@ -203,6 +286,24 @@ function renderHighlightPickers() {
       row.appendChild(meta);
       container.appendChild(row);
     });
+  });
+}
+
+function removeHighlight(id) {
+  const mark = document.querySelector(`mark[data-hid="${id}"]`);
+  if (mark) {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  }
+  state.highlights = state.highlights.filter((h) => h.id !== id);
+}
+
+function consumeHighlights(ids) {
+  ids.forEach((id) => {
+    const hl = state.highlights.find((h) => h.id === id);
+    if (!hl) return;
+    hl.used = true;
+    const mark = document.querySelector(`mark[data-hid="${id}"]`);
+    if (mark) mark.classList.add("used");
   });
 }
 
@@ -270,7 +371,7 @@ function renderArgumentConceptRefs() {
   container.innerHTML = "";
 
   if (state.annotations.concepts.length === 0) {
-    container.innerHTML = '<div class="muted">Add concepts first.</div>';
+    container.innerHTML = '<div class="muted">Optional. Add concepts first if needed.</div>';
     return;
   }
 
@@ -337,6 +438,7 @@ function addHighlight() {
       text,
       section: section.dataset.section || "Unknown",
       page: "",
+      used: false,
     });
 
     selection.removeAllRanges();
@@ -375,6 +477,7 @@ function createConcept() {
   };
 
   state.annotations.concepts.push(concept);
+  consumeHighlights(Array.from(state.highlightSelection.concept));
   el("conceptLabel").value = "";
   el("conceptAliases").value = "";
   document.querySelectorAll(".roles input").forEach((input) => (input.checked = false));
@@ -383,6 +486,7 @@ function createConcept() {
   renderConceptList();
   renderArgumentConceptRefs();
   renderHighlightPickers();
+  renderHighlights();
 }
 
 function createArgument() {
@@ -393,10 +497,6 @@ function createArgument() {
   const conceptRefs = Array.from(el("argumentConceptRefs").querySelectorAll("input:checked")).map(
     (input) => input.value
   );
-  if (conceptRefs.length === 0) {
-    alert("Select at least one concept ref.");
-    return;
-  }
 
   const sourceRefs = Array.from(state.highlightSelection.argument).map((id) => {
     const hl = state.highlights.find((h) => h.id === id);
@@ -408,17 +508,19 @@ function createArgument() {
     argument_id: uniqueId("A", state.annotations.arguments),
     text,
     arg_type: argType,
-    concept_refs: conceptRefs,
+    concept_refs: conceptRefs.length ? conceptRefs : undefined,
     source_refs: sourceRefs.length ? sourceRefs : undefined,
   };
 
   state.annotations.arguments.push(argument);
+  consumeHighlights(Array.from(state.highlightSelection.argument));
   el("argumentText").value = "";
   state.highlightSelection.argument.clear();
   el("argumentConceptRefs").querySelectorAll("input").forEach((input) => (input.checked = false));
 
   renderArgumentList();
   renderHighlightPickers();
+  renderHighlights();
 }
 
 async function uploadPdf() {
@@ -440,6 +542,7 @@ async function uploadPdf() {
   state.metadata = data.metadata || {};
   state.doc = data.doc;
   state.annotations = data.annotation || { concepts: [], arguments: [], created_at: null };
+  state.metadataChecks = data.annotation?.metadata_checks || {};
   state.highlights = [];
   state.highlightSelection.concept.clear();
   state.highlightSelection.argument.clear();
@@ -461,6 +564,7 @@ async function saveAnnotations() {
 
   const payload = {
     metadata: state.metadata,
+    metadata_checks: state.metadataChecks,
     concepts: state.annotations.concepts,
     arguments: state.annotations.arguments,
     created_at: state.annotations.created_at,
