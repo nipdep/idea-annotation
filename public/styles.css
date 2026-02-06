@@ -156,15 +156,23 @@ textarea {
 
 .left-stack {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: 190px 1fr 140px;
   gap: 18px;
-  max-height: calc(100vh - 120px);
+  height: calc(100vh - 120px);
   min-height: 0;
+  padding: 6px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.45);
 }
 
 .scrollable {
   overflow-y: auto;
   padding-right: 6px;
+  min-height: 0;
+  height: 100%;
+}
+
+.left-stack .panel {
   min-height: 0;
 }
 
@@ -629,5 +637,11 @@ mark.used {
   }
   .doc-view {
     max-height: 50vh;
+  }
+  .left-stack {
+    height: auto;
+    grid-template-rows: auto;
+    padding: 0;
+    background: transparent;
   }
 }

@@ -625,12 +625,13 @@ function getByTag(root, tag) {
 function renderHighlights() {
   const list = el("highlightList");
   list.innerHTML = "";
-  if (state.highlights.length === 0) {
+  const available = state.highlights.filter((hl) => !hl.used);
+  if (available.length === 0) {
     list.innerHTML = '<div class="muted">No highlights yet.</div>';
     return;
   }
 
-  state.highlights.forEach((hl) => {
+  available.forEach((hl) => {
     const item = document.createElement("div");
     item.className = `highlight-entry ${hl.used ? "used" : ""}`;
 
@@ -662,7 +663,7 @@ function renderHighlights() {
 
     item.appendChild(text);
     item.appendChild(meta);
-    if (!hl.used) item.appendChild(pageInput);
+    item.appendChild(pageInput);
     item.appendChild(remove);
     list.appendChild(item);
   });
@@ -877,6 +878,11 @@ function addHighlight() {
       page: "",
       used: false,
     });
+
+    const activeTab = document.querySelector(".tab.active")?.dataset.tab;
+    if (activeTab === "argument") {
+      state.highlightSelection.argument.add(id);
+    }
 
     selection.removeAllRanges();
     renderHighlights();
