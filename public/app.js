@@ -47,6 +47,7 @@ const state = {
   annotations: { concepts: [], arguments: [], created_at: null },
   highlights: [],
   pendingSelection: null,
+  argumentDescription: "",
   highlightSelection: {
     concept: new Set(),
     argument: new Set(),
@@ -104,13 +105,13 @@ function showToast(message, type = "info", options = {}) {
 
 function updateDescription(kind) {
   if (kind !== "argument") return;
-  const textarea = el("argumentDescription");
-  if (!textarea) return;
   const ids = Array.from(state.highlightSelection[kind]);
   const texts = state.highlights
     .filter((hl) => ids.includes(hl.id))
     .map((hl) => hl.text);
-  textarea.value = texts.join("\n\n");
+  state.argumentDescription = texts.join("\n\n");
+  const textarea = el("argumentDescription");
+  if (textarea) textarea.value = state.argumentDescription;
 }
 
 function getSelectionContext(range) {
@@ -1902,7 +1903,7 @@ function createArgument() {
     argument_id: uniqueId("A", state.annotations.arguments),
     text,
     arg_type: argType,
-    description: el("argumentDescription").value.trim() || undefined,
+    description: state.argumentDescription.trim() || undefined,
     concept_refs: conceptRefs.length ? conceptRefs : undefined,
     source_refs: sourceRefs.length ? sourceRefs : undefined,
   };
@@ -1910,7 +1911,7 @@ function createArgument() {
   state.annotations.arguments.push(argument);
   consumeHighlights(Array.from(state.highlightSelection.argument));
   el("argumentText").value = "";
-  el("argumentDescription").value = "";
+  state.argumentDescription = "";
   state.highlightSelection.argument.clear();
   el("argumentConceptRefs")
     .querySelectorAll(".ref-pill")
@@ -1949,6 +1950,7 @@ async function uploadPdf() {
   state.annotations = data.annotation || { concepts: [], arguments: [], created_at: null };
   state.metadataChecks = data.annotation?.metadata_checks || {};
   state.highlights = [];
+  state.argumentDescription = "";
   state.highlightSelection.concept.clear();
   state.highlightSelection.argument.clear();
   state.conceptTypePath = [];
