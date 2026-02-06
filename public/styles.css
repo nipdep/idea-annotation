@@ -84,14 +84,11 @@ body {
   flex-wrap: wrap;
 }
 
-.upload-card {
-  border: 1px dashed var(--border);
-  border-radius: 12px;
-  padding: 12px;
-  display: grid;
-  gap: 8px;
-  background: #fffaf2;
-  margin-bottom: 12px;
+.upload-inline {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 button {
@@ -140,6 +137,11 @@ input[type="file"] {
 
 textarea {
   resize: vertical;
+}
+
+textarea.loading {
+  background: #f4efe8;
+  color: var(--muted);
 }
 
 .muted {
@@ -270,6 +272,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 10px;
+  margin-top: 12px;
 }
 
 .doc-view {

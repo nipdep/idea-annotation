@@ -11,6 +11,9 @@ const PORT = process.env.PORT || 3000;
 const DATASET_DIR = path.join(__dirname, "..", "dataset", "papers");
 const TMP_DIR = path.join(__dirname, "..", "tmp");
 const GROBID_URL = process.env.GROBID_URL || "http://localhost:8070";
+const LLM_URL = process.env.LLM_URL || "http://localhost:1234/v1/x";
+const LLM_MODEL = process.env.LLM_MODEL || "";
+const LLM_MODE = process.env.LLM_MODE || "chat";
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.static(path.join(__dirname, "..", "public")));
@@ -171,6 +174,69 @@ app.post("/api/annotation/:id", (req, res) => {
 
     fs.writeFileSync(paperPath(paperId, "json"), JSON.stringify(out, null, 2));
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/normalize", async (req, res) => {
+  try {
+    const text = String(req.body?.text || "").trim();
+    if (!text) {
+      return res.status(400).json({ error: "Missing text" });
+    }
+
+    const instruction = `
+Strip to the semantic core. Apply three deterministic rules:
+1) Remove epistemic modifiers (e.g., significantly, suggests that, to the best of our knowledge).
+2) Collapse enumerations when possible, or produce one canonical assertion per comparison dimension.
+3) Make implicit subjects explicit.
+Then enforce canonical form: a competent reader should judge support/contradiction using the paper alone.
+Return only the canonical sentence.`;
+
+    const payload =
+      LLM_MODE === "prompt"
+        ? {
+            model: LLM_MODEL || undefined,
+            prompt: `${instruction}\n\nInput:\n${text}\n\nCanonical:`,
+            max_tokens: 120,
+            temperature: 0.2,
+            stream: false,
+          }
+        : {
+            model: LLM_MODEL || undefined,
+            messages: [
+              { role: "system", content: instruction.trim() },
+              { role: "user", content: `Input: ${text}` },
+            ],
+            max_tokens: 120,
+            temperature: 0.2,
+            stream: false,
+          };
+
+    const response = await fetch(LLM_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return res.status(502).json({ error: errText || "LLM error" });
+    }
+
+    const data = await response.json();
+    let output = "";
+    if (data?.choices?.[0]?.message?.content) {
+      output = data.choices[0].message.content.trim();
+    } else if (data?.choices?.[0]?.text) {
+      output = data.choices[0].text.trim();
+    } else if (data?.content) {
+      output = String(data.content).trim();
+    }
+
+    if (!output) output = text;
+    res.json({ normalized: output });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

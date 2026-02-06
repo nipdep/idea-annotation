@@ -26,14 +26,11 @@
           <div class="panel-header">
             <h2>Source File</h2>
           </div>
-          <div class="upload-card">
-            <div class="subhead">Upload PDF</div>
-            <div class="upload-bar">
-              <input type="file" id="pdfInput" accept="application/pdf" />
-              <button id="uploadBtn">Upload PDF</button>
-            </div>
-            <div id="paperInfo" class="muted"></div>
+          <div class="upload-inline">
+            <input type="file" id="pdfInput" accept="application/pdf" />
+            <button id="uploadBtn">Upload</button>
           </div>
+          <div id="paperInfo" class="muted"></div>
         </section>
 
         <section class="panel scrollable" id="metadataPanel">
@@ -64,12 +61,12 @@
       <section class="panel doc-panel">
         <div class="panel-header">
           <h2>Document</h2>
-          <div class="doc-actions">
-            <button id="addHighlightBtn">Add Highlight</button>
-            <span id="highlightHint" class="muted"></span>
-          </div>
         </div>
         <div id="docView" class="doc-view"></div>
+        <div class="doc-actions">
+          <button id="addHighlightBtn">Add Grounding</button>
+          <span id="highlightHint" class="muted"></span>
+        </div>
         <div class="list-block">
           <div class="subhead">Highlights</div>
           <div id="highlightList" class="list"></div>

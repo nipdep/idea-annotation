@@ -83,6 +83,34 @@ function showToast(message, type = "info", options = {}) {
   return toast;
 }
 
+async function requestNormalization(text) {
+  const textArea = el("argumentText");
+  if (!textArea) return;
+  textArea.value = "Generating suggestion...";
+  textArea.readOnly = true;
+  textArea.classList.add("loading");
+  const toast = showToast("Generating canonical statement...", "loading", { persist: true });
+
+  try {
+    const res = await fetch("/api/normalize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) throw new Error("LLM request failed");
+    const data = await res.json();
+    const suggestion = data.normalized || text;
+    textArea.value = suggestion;
+  } catch (err) {
+    textArea.value = text;
+    showToast("LLM suggestion failed. Using original text.", "error");
+  } finally {
+    textArea.readOnly = false;
+    textArea.classList.remove("loading");
+    if (toast) toast.remove();
+  }
+}
+
 function formatTypeLabel(value) {
   return value
     .split(" ")
@@ -841,7 +869,7 @@ function addHighlight() {
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed) {
     setHint("Select text in a single paragraph first.");
-    showToast("Select text in a paragraph, then click Add Highlight.", "error");
+    showToast("Select text in a paragraph, then click Add Grounding.", "error");
     return;
   }
 
@@ -882,6 +910,7 @@ function addHighlight() {
     const activeTab = document.querySelector(".tab.active")?.dataset.tab;
     if (activeTab === "argument") {
       state.highlightSelection.argument.add(id);
+      requestNormalization(text);
     }
 
     selection.removeAllRanges();
