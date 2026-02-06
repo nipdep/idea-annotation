@@ -670,9 +670,8 @@ mark.used {
 }
 
 .highlight-entry {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: grid;
+  gap: 4px;
   border: 1px dashed var(--border);
   padding: 8px;
   border-radius: 8px;
@@ -690,6 +689,26 @@ mark.used {
 .highlight-entry .meta {
   font-size: 0.8rem;
   color: var(--muted);
+}
+
+.highlight-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #f4efe8;
+  border: 1px solid var(--border);
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+.highlight-pill input {
+  margin: 0;
+}
+
+.highlight-pill-text {
+  font-size: 0.9rem;
 }
 
 .type-picker {

@@ -986,7 +986,8 @@ function renderHighlightPickers() {
 
     available.forEach((hl) => {
       const row = document.createElement("label");
-      row.className = "highlight-entry";
+      row.className = "highlight-pill";
+      row.title = `Section: ${hl.section}${hl.page ? ` - Page ${hl.page}` : ""}`;
 
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
@@ -999,16 +1000,12 @@ function renderHighlightPickers() {
         }
       });
 
-      const text = document.createElement("div");
+      const text = document.createElement("span");
+      text.className = "highlight-pill-text";
       text.textContent = hl.text;
-
-      const meta = document.createElement("div");
-      meta.className = "meta";
-      meta.textContent = `Section: ${hl.section}${hl.page ? ` - Page ${hl.page}` : ""}`;
 
       row.appendChild(checkbox);
       row.appendChild(text);
-      row.appendChild(meta);
       container.appendChild(row);
     });
   });
