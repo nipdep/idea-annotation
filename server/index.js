@@ -37,8 +37,6 @@ async function callGrobid(pdfPath) {
   const form = new FormData();
   form.append("input", fs.createReadStream(pdfPath));
   form.append("consolidateHeader", "1");
-  form.append("consolidateCitations", "1");
-  form.append("includeRawCitations", "1");
 
   const res = await fetch(`${GROBID_URL}/api/processFulltextDocument`, {
     method: "POST",

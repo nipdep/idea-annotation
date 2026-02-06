@@ -335,13 +335,8 @@ function renderDoc() {
   const docView = el("docView");
   docView.innerHTML = "";
 
-  if (state.teiXml && window.CETEIcean) {
-    const cetei = new CETEIcean();
-    cetei.makeHTML5(state.teiXml, (data) => {
-      docView.innerHTML = "";
-      docView.appendChild(data);
-    });
-    return;
+  if (state.teiXml) {
+    if (renderTeiDoc(state.teiXml, docView)) return;
   }
 
   if (!state.doc) {
@@ -365,6 +360,213 @@ function renderDoc() {
     });
 
     docView.appendChild(sectionEl);
+  });
+}
+
+function renderTeiDoc(teiXml, docView) {
+  const parser = new DOMParser();
+  const xml = parser.parseFromString(teiXml, "text/xml");
+  if (xml.querySelector("parsererror")) {
+    return false;
+  }
+
+  const container = document.createElement("div");
+  container.className = "tei-doc";
+
+  const header = document.createElement("section");
+  header.className = "tei-header";
+  header.dataset.section = "Header";
+
+  const titleNode =
+    xml.querySelector("teiHeader titleStmt title") ||
+    xml.querySelector("fileDesc titleStmt title") ||
+    xml.querySelector("titleStmt title");
+  const title = extractText(titleNode);
+  if (title) {
+    const h1 = document.createElement("h1");
+    h1.className = "tei-title";
+    h1.textContent = title;
+    header.appendChild(h1);
+  }
+
+  const authorNodes = xml.querySelectorAll("teiHeader titleStmt author, titleStmt author");
+  const authors = Array.from(authorNodes)
+    .map((node) => formatAuthor(node))
+    .filter(Boolean);
+  if (authors.length) {
+    const authorBlock = document.createElement("div");
+    authorBlock.className = "tei-authors";
+    authorBlock.textContent = authors.join(", ");
+    header.appendChild(authorBlock);
+  }
+
+  if (header.childNodes.length) container.appendChild(header);
+
+  const abstractNode =
+    xml.querySelector("profileDesc abstract") ||
+    xml.querySelector("text > front > abstract") ||
+    xml.querySelector("front abstract");
+  const abstractText = extractText(abstractNode);
+  if (abstractText) {
+    const abstractSection = document.createElement("section");
+    abstractSection.className = "tei-abstract";
+    abstractSection.dataset.section = "Abstract";
+    const label = document.createElement("h3");
+    label.textContent = "Abstract";
+    abstractSection.appendChild(label);
+    const p = document.createElement("p");
+    p.className = "doc-paragraph";
+    p.textContent = abstractText;
+    abstractSection.appendChild(p);
+    container.appendChild(abstractSection);
+  }
+
+  const body = xml.querySelector("text > body") || xml.querySelector("body");
+  if (body) {
+    renderTeiChildren(body, container, "Body");
+  }
+
+  const back = xml.querySelector("text > back") || xml.querySelector("back");
+  const listBibl = back ? back.querySelector("listBibl") : null;
+  if (listBibl) {
+    const refSection = document.createElement("section");
+    refSection.className = "tei-section";
+    refSection.dataset.section = "References";
+    const head = document.createElement("h3");
+    head.textContent = "References";
+    refSection.appendChild(head);
+
+    const list = document.createElement("ol");
+    list.className = "tei-bibl";
+    listBibl.querySelectorAll("biblStruct, bibl").forEach((bibl) => {
+      const item = document.createElement("li");
+      item.textContent = extractText(bibl);
+      list.appendChild(item);
+    });
+    refSection.appendChild(list);
+    container.appendChild(refSection);
+  }
+
+  docView.appendChild(container);
+  return true;
+}
+
+function extractText(node) {
+  if (!node) return "";
+  return node.textContent.replace(/\s+/g, " ").trim();
+}
+
+function formatAuthor(authorNode) {
+  if (!authorNode) return "";
+  const forenames = Array.from(authorNode.querySelectorAll("forename")).map((n) => extractText(n));
+  const surname = extractText(authorNode.querySelector("surname"));
+  const name = [...forenames, surname].filter(Boolean).join(" ");
+  return name || extractText(authorNode);
+}
+
+function renderTeiChildren(node, parent, fallbackSection) {
+  Array.from(node.childNodes).forEach((child) => {
+    if (child.nodeType !== 1) return;
+    const tag = child.tagName.toLowerCase();
+
+    if (tag === "div") {
+      const headNode = Array.from(child.children).find(
+        (el) => el.tagName.toLowerCase() === "head"
+      );
+      const title = extractText(headNode);
+      if (!title) {
+        renderTeiChildren(child, parent, fallbackSection);
+        return;
+      }
+      const section = document.createElement("section");
+      section.className = "tei-section";
+      section.dataset.section = title;
+      const h3 = document.createElement("h3");
+      h3.textContent = title;
+      section.appendChild(h3);
+      parent.appendChild(section);
+      renderTeiChildren(child, section, title);
+      return;
+    }
+
+    if (tag === "head") {
+      return;
+    }
+
+    if (tag === "p") {
+      const p = document.createElement("p");
+      p.className = "doc-paragraph";
+      p.textContent = extractText(child);
+      parent.appendChild(p);
+      return;
+    }
+
+    if (tag === "figure") {
+      const fig = document.createElement("div");
+      fig.className = "tei-figure";
+      const figHead = extractText(child.querySelector("head"));
+      const figDesc = extractText(child.querySelector("figDesc"));
+      const graphic = child.querySelector("graphic");
+      const graphicRef = graphic?.getAttribute("url") || graphic?.getAttribute("target") || "";
+      const title = figHead || "Figure";
+      const label = document.createElement("div");
+      label.className = "tei-figure-title";
+      label.textContent = title;
+      fig.appendChild(label);
+      if (graphicRef) {
+        const ref = document.createElement("div");
+        ref.className = "tei-figure-desc";
+        ref.textContent = `Graphic: ${graphicRef}`;
+        fig.appendChild(ref);
+      }
+      if (figDesc) {
+        const desc = document.createElement("div");
+        desc.className = "tei-figure-desc";
+        desc.textContent = figDesc;
+        fig.appendChild(desc);
+      }
+      parent.appendChild(fig);
+      return;
+    }
+
+    if (tag === "table") {
+      const table = document.createElement("table");
+      table.className = "tei-table";
+      child.querySelectorAll("row").forEach((rowNode) => {
+        const tr = document.createElement("tr");
+        rowNode.querySelectorAll("cell").forEach((cellNode) => {
+          const td = document.createElement("td");
+          td.textContent = extractText(cellNode);
+          tr.appendChild(td);
+        });
+        table.appendChild(tr);
+      });
+      parent.appendChild(table);
+      return;
+    }
+
+    if (tag === "formula") {
+      const block = document.createElement("div");
+      block.className = "tei-formula";
+      const formulaText = extractText(child);
+      block.textContent = formulaText || "[Formula]";
+      parent.appendChild(block);
+      return;
+    }
+
+    if (tag === "list") {
+      const ul = document.createElement("ul");
+      ul.className = "tei-list";
+      child.querySelectorAll("item").forEach((itemNode) => {
+        const li = document.createElement("li");
+        li.textContent = extractText(itemNode);
+        ul.appendChild(li);
+      });
+      parent.appendChild(ul);
+      return;
+    }
+
+    renderTeiChildren(child, parent, fallbackSection);
   });
 }
 
@@ -595,17 +797,13 @@ function addHighlight() {
     ? range.commonAncestorContainer
     : range.commonAncestorContainer.parentElement;
 
-  const paragraph = container.closest("tei-p, p");
-  const sectionEl = container.closest("tei-div");
-  const sectionHead = sectionEl ? sectionEl.querySelector("tei-head") : null;
-  let sectionLabel = sectionHead?.textContent?.trim() || "";
-  if (!sectionLabel) {
-    if (container.closest("tei-abstract")) sectionLabel = "Abstract";
-    else if (container.closest("tei-titleStmt")) sectionLabel = "Header";
-    else sectionLabel = "Body";
-  }
+  const block = container.closest(
+    ".doc-paragraph, p, h1, h2, h3, li, td, .tei-figure-desc, .tei-figure-title"
+  );
+  const sectionEl = container.closest("[data-section]");
+  let sectionLabel = sectionEl?.dataset.section || "Body";
 
-  if (!paragraph) {
+  if (!block) {
     setHint("Select text inside the document body.");
     showToast("Select text inside the document content.", "error");
     return;

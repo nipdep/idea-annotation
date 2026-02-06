@@ -250,53 +250,47 @@ textarea {
   padding-right: 6px;
   max-height: calc(70vh - 80px);
 }
-
-tei-tei,
-tei-text,
-tei-body,
-tei-div,
-tei-p,
-tei-head,
-tei-abstract,
-tei-titleStmt,
-tei-title,
-tei-author,
-tei-byline {
-  display: block;
-}
-
-tei-tei {
+.tei-doc {
   background: #fff;
   border-radius: 12px;
   border: 1px solid var(--border);
-  padding: 12px;
+  padding: 16px;
 }
 
-tei-titleStmt {
+.tei-header {
   border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
   margin-bottom: 12px;
-  padding-bottom: 8px;
 }
 
-tei-title {
+.tei-title {
+  margin: 0 0 6px;
   font-family: "Avenir Next", "Avenir", "Trebuchet MS", "Verdana", sans-serif;
-  font-size: 18px;
+  font-size: 20px;
   color: var(--accent-2);
 }
 
-tei-author {
+.tei-authors {
   font-size: 0.95rem;
   color: var(--muted);
 }
 
-tei-abstract {
+.tei-abstract {
   background: #f7f0e7;
   padding: 10px 12px;
   border-radius: 10px;
   margin: 12px 0 18px;
 }
 
-tei-head {
+.tei-abstract h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent-2);
+}
+
+.tei-section h3 {
   font-family: "Avenir Next", "Avenir", "Trebuchet MS", "Verdana", sans-serif;
   color: var(--accent-2);
   font-size: 15px;
@@ -305,23 +299,53 @@ tei-head {
   text-transform: uppercase;
 }
 
-tei-p {
+.doc-paragraph {
   margin: 0 0 10px;
   line-height: 1.6;
 }
 
-tei-listBibl {
+.tei-figure,
+.tei-formula {
+  border: 1px dashed var(--border);
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin: 10px 0 14px;
+  background: #fffaf2;
+}
+
+.tei-figure-title {
+  font-weight: 600;
+  color: var(--accent-2);
+  margin-bottom: 6px;
+}
+
+.tei-figure-desc {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.tei-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0 14px;
+  font-size: 0.9rem;
+}
+
+.tei-table td {
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+}
+
+.tei-list {
+  margin: 8px 0 12px 18px;
+}
+
+.tei-bibl {
   border-top: 1px solid var(--border);
   margin-top: 18px;
   padding-top: 12px;
-}
-
-tei-biblStruct,
-tei-bibl {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 0.9rem;
   color: var(--muted);
+  font-size: 0.9rem;
 }
 
 .section {
