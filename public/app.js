@@ -471,17 +471,17 @@ function renderPaperFocusedGraph(svg, item) {
   const positionCache = state.library.graphPositions;
 
   const nodes = [
-    { id: "Work", label: "Work", type: "paper", r: 22, fx: width / 2, fy: 70 },
-    { id: "Argument", label: "Argument", type: "class", r: 20, fx: width / 2, fy: 150 },
-    { id: "Issue", label: "Issue", type: "class", r: 18, fx: 180, fy: 250 },
-    { id: "Idea", label: "Idea", type: "class", r: 18, fx: 620, fy: 250 },
-    { id: "Approach", label: "Approach", type: "class", r: 18, fx: 400, fy: 250 },
-    { id: "Backing", label: "Backing", type: "class", r: 16, fx: 90, fy: 340 },
-    { id: "Evidence", label: "Evidence", type: "class", r: 16, fx: 360, fy: 340 },
-    { id: "Claim", label: "Claim", type: "class", r: 16, fx: 640, fy: 340 },
-    { id: "Warrant", label: "Warrant", type: "class", r: 16, fx: 520, fy: 300 },
-    { id: "Assumption", label: "Assumption", type: "class", r: 14, fx: 470, fy: 440 },
-    { id: "Artifact", label: "Artifact", type: "class", r: 14, fx: 300, fy: 440 },
+    { id: "Work", label: "Work", type: "paper", r: 22, fx: 520, fy: 70 },
+    { id: "Argument", label: "Argument", type: "class", r: 20, fx: 500, fy: 150 },
+    { id: "Idea", label: "Idea", type: "class", r: 18, fx: 200, fy: 170 },
+    { id: "Issue", label: "Issue", type: "class", r: 18, fx: 220, fy: 270 },
+    { id: "Backing", label: "Backing", type: "class", r: 16, fx: 320, fy: 340 },
+    { id: "Approach", label: "Approach", type: "class", r: 18, fx: 440, fy: 380 },
+    { id: "Artifact", label: "Artifact", type: "class", r: 14, fx: 360, fy: 470 },
+    { id: "Assumption", label: "Assumption", type: "class", r: 14, fx: 520, fy: 470 },
+    { id: "Evidence", label: "Evidence", type: "class", r: 16, fx: 600, fy: 360 },
+    { id: "Claim", label: "Claim", type: "class", r: 16, fx: 660, fy: 300 },
+    { id: "Warrant", label: "Warrant", type: "class", r: 16, fx: 660, fy: 190 },
   ];
 
   const links = [
@@ -507,8 +507,11 @@ function renderPaperFocusedGraph(svg, item) {
     if (!instances.length || !state.library.expanded.has(node.id)) return;
     instances.forEach((inst, idx) => {
       const parent = nodes.find((n) => n.id === node.id);
-      const angle = (2 * Math.PI * idx) / instances.length;
-      const radius = 40;
+      const baseAngle = parent?.fy && parent.fy > height * 0.7 ? -Math.PI / 2 : Math.PI / 2;
+      const spread = Math.PI;
+      const angle =
+        baseAngle + (spread * (idx - (instances.length - 1) / 2)) / Math.max(instances.length, 1);
+      const radius = 48;
       nodes.push({
         id: `${node.id}:${inst.id}`,
         label: inst.label,
@@ -581,6 +584,7 @@ function renderPaperFocusedGraph(svg, item) {
     .attr("markerWidth", 6)
     .attr("markerHeight", 6)
     .attr("orient", "auto")
+    .attr("markerUnits", "userSpaceOnUse")
     .append("path")
     .attr("d", "M0,-5L10,0L0,5")
     .attr("fill", "#d0c6bd");
@@ -665,15 +669,39 @@ function renderPaperFocusedGraph(svg, item) {
     )
     .force("charge", window.d3.forceManyBody().strength(-280))
     .force("center", window.d3.forceCenter(width / 2, height / 2))
-    .force("collision", window.d3.forceCollide().radius((d) => d.r + 10))
-    .alpha(0.4)
-    .alphaDecay(0.15)
+    .force("collision", window.d3.forceCollide().radius((d) => d.r + 8))
+    .alpha(0.2)
+    .alphaDecay(0.2)
     .on("tick", () => {
       link
-        .attr("x1", (d) => d.source.x)
-        .attr("y1", (d) => d.source.y)
-        .attr("x2", (d) => d.target.x)
-        .attr("y2", (d) => d.target.y);
+        .attr("x1", (d) => {
+          const r = d.source.r || 0;
+          const dx = d.target.x - d.source.x;
+          const dy = d.target.y - d.source.y;
+          const len = Math.hypot(dx, dy) || 1;
+          return d.source.x + (dx / len) * r;
+        })
+        .attr("y1", (d) => {
+          const r = d.source.r || 0;
+          const dx = d.target.x - d.source.x;
+          const dy = d.target.y - d.source.y;
+          const len = Math.hypot(dx, dy) || 1;
+          return d.source.y + (dy / len) * r;
+        })
+        .attr("x2", (d) => {
+          const r = d.target.r || 0;
+          const dx = d.target.x - d.source.x;
+          const dy = d.target.y - d.source.y;
+          const len = Math.hypot(dx, dy) || 1;
+          return d.target.x - (dx / len) * (r + 4);
+        })
+        .attr("y2", (d) => {
+          const r = d.target.r || 0;
+          const dx = d.target.x - d.source.x;
+          const dy = d.target.y - d.source.y;
+          const len = Math.hypot(dx, dy) || 1;
+          return d.target.y - (dy / len) * (r + 4);
+        });
 
       linkLabel
         .attr("x", (d) => (d.source.x + d.target.x) / 2)
@@ -682,6 +710,8 @@ function renderPaperFocusedGraph(svg, item) {
       node.attr("transform", (d) => `translate(${d.x}, ${d.y})`);
 
       nodes.forEach((d) => {
+        d.x = Math.max(40, Math.min(width - 40, d.x));
+        d.y = Math.max(40, Math.min(height - 40, d.y));
         positionCache[d.id] = { x: d.x, y: d.y };
       });
     });
