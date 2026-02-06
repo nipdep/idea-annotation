@@ -608,7 +608,7 @@ function buildTable(tableNode) {
     wrap.className = "tei-table-wrap";
     const badge = document.createElement("img");
     badge.className = "tei-table-badge";
-    badge.src = "/assets/idea_graph_figure.svg";
+    badge.src = "/assets/icon.png";
     badge.alt = "Table";
     const pre = document.createElement("div");
     pre.className = "tei-figure-desc";
@@ -622,7 +622,7 @@ function buildTable(tableNode) {
   wrap.className = "tei-table-wrap";
   const badge = document.createElement("img");
   badge.className = "tei-table-badge";
-  badge.src = "/assets/idea_graph_figure.svg";
+  badge.src = "/assets/icon.png";
   badge.alt = "Table";
 
   const table = document.createElement("table");
