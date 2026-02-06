@@ -226,7 +226,9 @@ body {
 .graph-edge-label {
   font-size: 10px;
   fill: #6b6157;
-  background: #fff;
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 3px;
 }
 
 details {

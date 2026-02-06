@@ -466,91 +466,189 @@ function renderPaperFocusedGraph(svg, item) {
   const height = 520;
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
 
-  const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-  bg.setAttribute("x", "0");
-  bg.setAttribute("y", "0");
-  bg.setAttribute("width", String(width));
-  bg.setAttribute("height", String(height));
-  bg.setAttribute("fill", "transparent");
-  bg.addEventListener("click", () => {
-    state.library.selectedId = null;
-    state.library.selectedInstance = null;
-    state.library.expanded = new Set();
-    renderLibraryGraph();
-    renderLibraryTable();
-    renderLibraryDetail();
-  });
-  svg.appendChild(bg);
-
-  const title = document.createElementNS("http://www.w3.org/2000/svg", "text");
-  title.setAttribute("x", "20");
-  title.setAttribute("y", "28");
-  title.setAttribute("fill", "#1e1b16");
-  title.setAttribute("font-size", "14");
-  title.textContent = (item.metadata?.title || "Selected Paper").slice(0, 80);
-  svg.appendChild(title);
-
-  const hint = document.createElementNS("http://www.w3.org/2000/svg", "text");
-  hint.setAttribute("x", "20");
-  hint.setAttribute("y", "46");
-  hint.setAttribute("fill", "#6b6157");
-  hint.setAttribute("font-size", "11");
-  hint.textContent = "Click background to return to paper graph";
-  svg.appendChild(hint);
-
   const groups = buildArgumentGroups(item);
 
-  const paperNode = { id: "Work", label: "Work", x: 400, y: 70 };
-  const argumentNode = { id: "Argument", label: "Argument", x: 400, y: 150 };
   const nodes = [
-    { id: "Issue", label: "Issue", x: 180, y: 250 },
-    { id: "Idea", label: "Idea", x: 620, y: 250 },
-    { id: "Approach", label: "Approach", x: 400, y: 250 },
-    { id: "Backing", label: "Backing", x: 90, y: 340 },
-    { id: "Evidence", label: "Evidence", x: 360, y: 340 },
-    { id: "Claim", label: "Claim", x: 640, y: 340 },
-    { id: "Warrant", label: "Warrant", x: 520, y: 300 },
-    { id: "Assumption", label: "Assumption", x: 470, y: 440 },
-    { id: "Artifact", label: "Artifact", x: 300, y: 440 },
+    { id: "Work", label: "Work", type: "paper", r: 22, fx: width / 2, fy: 70 },
+    { id: "Argument", label: "Argument", type: "class", r: 20, fx: width / 2, fy: 150 },
+    { id: "Issue", label: "Issue", type: "class", r: 18, x: 180, y: 250 },
+    { id: "Idea", label: "Idea", type: "class", r: 18, x: 620, y: 250 },
+    { id: "Approach", label: "Approach", type: "class", r: 18, x: 400, y: 250 },
+    { id: "Backing", label: "Backing", type: "class", r: 16, x: 90, y: 340 },
+    { id: "Evidence", label: "Evidence", type: "class", r: 16, x: 360, y: 340 },
+    { id: "Claim", label: "Claim", type: "class", r: 16, x: 640, y: 340 },
+    { id: "Warrant", label: "Warrant", type: "class", r: 16, x: 520, y: 300 },
+    { id: "Assumption", label: "Assumption", type: "class", r: 14, x: 470, y: 440 },
+    { id: "Artifact", label: "Artifact", type: "class", r: 14, x: 300, y: 440 },
   ];
 
-  drawNode(svg, paperNode.x, paperNode.y, paperNode.label, "graph-node paper-node");
-  drawNode(svg, argumentNode.x, argumentNode.y, argumentNode.label, "graph-node");
-  drawEdge(svg, paperNode.x, paperNode.y + 18, argumentNode.x, argumentNode.y - 18, "contains", -12);
-
-  const edges = [
-    { from: argumentNode, to: nodes.find((n) => n.id === "Idea"), label: "proposesIdea" },
-    { from: argumentNode, to: nodes.find((n) => n.id === "Issue"), label: "concernsIssue" },
-    { from: nodes.find((n) => n.id === "Idea"), to: nodes.find((n) => n.id === "Issue"), label: "responseTo" },
-    { from: argumentNode, to: nodes.find((n) => n.id === "Backing"), label: "hasBacking" },
-    { from: argumentNode, to: nodes.find((n) => n.id === "Approach"), label: "realizes" },
-    { from: argumentNode, to: nodes.find((n) => n.id === "Evidence"), label: "hasEvidence" },
-    { from: nodes.find((n) => n.id === "Approach"), to: nodes.find((n) => n.id === "Evidence"), label: "generates" },
-    { from: argumentNode, to: nodes.find((n) => n.id === "Claim"), label: "hasClaim" },
-    { from: nodes.find((n) => n.id === "Evidence"), to: nodes.find((n) => n.id === "Claim"), label: "proves" },
-    { from: argumentNode, to: nodes.find((n) => n.id === "Warrant"), label: "hasWarrant" },
-    { from: nodes.find((n) => n.id === "Warrant"), to: nodes.find((n) => n.id === "Claim"), label: "leadTo" },
-    { from: nodes.find((n) => n.id === "Approach"), to: nodes.find((n) => n.id === "Assumption"), label: "hasAssumption" },
-    { from: nodes.find((n) => n.id === "Approach"), to: nodes.find((n) => n.id === "Artifact"), label: "uses" },
-    { from: nodes.find((n) => n.id === "Approach"), to: nodes.find((n) => n.id === "Artifact"), label: "introduce" },
+  const links = [
+    { source: "Work", target: "Argument", label: "contains", distance: 90 },
+    { source: "Argument", target: "Idea", label: "proposesIdea", distance: 140 },
+    { source: "Argument", target: "Issue", label: "concernsIssue", distance: 140 },
+    { source: "Idea", target: "Issue", label: "responseTo", distance: 140 },
+    { source: "Argument", target: "Backing", label: "hasBacking", distance: 160 },
+    { source: "Argument", target: "Approach", label: "realizes", distance: 120 },
+    { source: "Argument", target: "Evidence", label: "hasEvidence", distance: 150 },
+    { source: "Approach", target: "Evidence", label: "generates", distance: 120 },
+    { source: "Argument", target: "Claim", label: "hasClaim", distance: 150 },
+    { source: "Evidence", target: "Claim", label: "proves", distance: 120 },
+    { source: "Argument", target: "Warrant", label: "hasWarrant", distance: 150 },
+    { source: "Warrant", target: "Claim", label: "leadTo", distance: 120 },
+    { source: "Approach", target: "Assumption", label: "hasAssumption", distance: 120 },
+    { source: "Approach", target: "Artifact", label: "uses", distance: 120 },
+    { source: "Approach", target: "Artifact", label: "introduce", distance: 120 },
   ];
 
   nodes.forEach((node) => {
-    const hasInstances = (groups[node.id] || []).length > 0;
-    const className = `graph-node${hasInstances ? "" : " empty"}${state.library.expanded.has(node.id) ? " active" : ""}`;
-    drawNode(svg, node.x, node.y, node.label, className, () => toggleGraphGroup(node.id));
-  });
-
-  edges.forEach((edge) => {
-    if (!edge.from || !edge.to) return;
-    drawEdge(svg, edge.from.x, edge.from.y, edge.to.x, edge.to.y, edge.label, edge.from.id === "Argument" ? -10 : -6);
-  });
-
-  nodes.forEach((node) => {
-    if (!state.library.expanded.has(node.id)) return;
     const instances = groups[node.id] || [];
-    renderInstanceNodes(svg, node, instances);
+    if (!instances.length || !state.library.expanded.has(node.id)) return;
+    instances.forEach((inst, idx) => {
+      nodes.push({
+        id: `${node.id}:${inst.id}`,
+        label: inst.label,
+        type: "instance",
+        r: 12,
+        parent: node.id,
+        instance: inst,
+      });
+      links.push({
+        source: node.id,
+        target: `${node.id}:${inst.id}`,
+        label: "",
+        distance: 55 + idx * 2,
+      });
+    });
   });
+
+  const svgSel = window.d3.select(svg);
+  svgSel.selectAll("*").remove();
+
+  svgSel
+    .append("rect")
+    .attr("x", 0)
+    .attr("y", 0)
+    .attr("width", width)
+    .attr("height", height)
+    .attr("fill", "transparent")
+    .on("click", () => {
+      state.library.selectedId = null;
+      state.library.selectedInstance = null;
+      state.library.expanded = new Set();
+      renderLibraryGraph();
+      renderLibraryTable();
+      renderLibraryDetail();
+    });
+
+  svgSel
+    .append("text")
+    .attr("x", 20)
+    .attr("y", 28)
+    .attr("fill", "#1e1b16")
+    .attr("font-size", "14")
+    .text((item.metadata?.title || "Selected Paper").slice(0, 80));
+
+  svgSel
+    .append("text")
+    .attr("x", 20)
+    .attr("y", 46)
+    .attr("fill", "#6b6157")
+    .attr("font-size", "11")
+    .text("Click background to return to paper graph");
+
+  const link = svgSel
+    .append("g")
+    .attr("stroke", "#d0c6bd")
+    .selectAll("line")
+    .data(links)
+    .join("line")
+    .attr("stroke-width", 1.2);
+
+  const linkLabel = svgSel
+    .append("g")
+    .selectAll("text")
+    .data(links.filter((l) => l.label))
+    .join("text")
+    .attr("class", "graph-edge-label")
+    .text((d) => d.label);
+
+  const node = svgSel
+    .append("g")
+    .selectAll("g")
+    .data(nodes)
+    .join("g")
+    .call(
+      window.d3
+        .drag()
+        .on("start", (event, d) => {
+          if (!event.active) simulation.alphaTarget(0.3).restart();
+          d.fx = d.x;
+          d.fy = d.y;
+        })
+        .on("drag", (event, d) => {
+          d.fx = event.x;
+          d.fy = event.y;
+        })
+        .on("end", (event, d) => {
+          if (!event.active) simulation.alphaTarget(0);
+          if (d.type !== "paper" && d.type !== "class" && d.type !== "instance") {
+            d.fx = null;
+            d.fy = null;
+          }
+        })
+    );
+
+  node
+    .append("circle")
+    .attr("r", (d) => d.r)
+    .attr("class", (d) => {
+      if (d.type === "paper") return "graph-node paper-node";
+      if (d.type === "instance") return "graph-node small-node";
+      const hasInstances = (groups[d.id] || []).length > 0;
+      return `graph-node${hasInstances ? "" : " empty"}${state.library.expanded.has(d.id) ? " active" : ""}`;
+    })
+    .on("click", (event, d) => {
+      event.stopPropagation();
+      if (d.type === "instance") {
+        state.library.selectedInstance = { kind: d.instance.kind, id: d.instance.id };
+        renderLibraryDetail();
+        renderLibraryGraph();
+        return;
+      }
+      if (d.type === "class") {
+        toggleGraphGroup(d.id);
+      }
+    });
+
+  node
+    .append("text")
+    .attr("class", "graph-label")
+    .attr("text-anchor", "middle")
+    .attr("dy", 4)
+    .text((d) => d.label);
+
+  const simulation = window.d3
+    .forceSimulation(nodes)
+    .force(
+      "link",
+      window.d3.forceLink(links).id((d) => d.id).distance((d) => d.distance || 120)
+    )
+    .force("charge", window.d3.forceManyBody().strength(-280))
+    .force("center", window.d3.forceCenter(width / 2, height / 2))
+    .force("collision", window.d3.forceCollide().radius((d) => d.r + 10))
+    .on("tick", () => {
+      link
+        .attr("x1", (d) => d.source.x)
+        .attr("y1", (d) => d.source.y)
+        .attr("x2", (d) => d.target.x)
+        .attr("y2", (d) => d.target.y);
+
+      linkLabel
+        .attr("x", (d) => (d.source.x + d.target.x) / 2)
+        .attr("y", (d) => (d.source.y + d.target.y) / 2 - 6);
+
+      node.attr("transform", (d) => `translate(${d.x}, ${d.y})`);
+    });
 }
 
 function drawNode(svg, x, y, label, className, onClick) {
