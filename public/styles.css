@@ -735,14 +735,15 @@ mark.used {
 }
 
 .highlight-pill {
+  position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
-  padding: 10px 14px;
-  border-radius: 999px;
+  padding: 12px 34px 12px 14px;
+  border-radius: 10px;
   background: #f4efe8;
   border: 1px solid var(--border);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   cursor: pointer;
   width: 100%;
   color: var(--ink);
@@ -759,6 +760,25 @@ mark.used {
 .highlight-pill.selected {
   background: #bfe8c8;
   border-color: #7bbf8b;
+}
+
+.highlight-pill-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: none;
+  background: #efe6dd;
+  color: #6a5c4f;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.highlight-pill-close:hover {
+  background: #e2d6c8;
 }
 
 .ref-pill {
@@ -877,6 +897,36 @@ mark.used {
 
 .highlight-entry input[type="text"] {
   width: 120px;
+}
+
+.selection-menu {
+  position: absolute;
+  z-index: 30;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: #fffaf4;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(30, 27, 22, 0.12);
+}
+
+.selection-menu.hidden {
+  display: none;
+}
+
+.selection-menu button {
+  border: none;
+  background: #2e6b67;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.selection-menu button:last-child {
+  background: #c25733;
 }
 
 .missing input,

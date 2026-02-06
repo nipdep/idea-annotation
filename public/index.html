@@ -71,14 +71,6 @@
           <h2>Document</h2>
         </div>
         <div id="docView" class="doc-view"></div>
-        <div class="doc-actions">
-          <button id="addHighlightBtn">Add Grounding</button>
-          <span id="highlightHint" class="muted"></span>
-        </div>
-        <div class="list-block">
-          <div class="subhead">Highlights</div>
-          <div id="highlightList" class="list"></div>
-        </div>
       </section>
 
       <section class="panel" id="annotatePanel">
@@ -226,6 +218,11 @@
     <footer class="app-footer">
       Copyright © 2026 Rensselaer Polytechnic Institute | <a href="https://tw.rpi.edu/about" target="_blank" rel="noopener noreferrer">Tetherless World Constellation</a>
     </footer>
+
+    <div id="selectionMenu" class="selection-menu hidden">
+      <button type="button" data-action="concept">Add to Concept Context</button>
+      <button type="button" data-action="argument">Add to Argument Context</button>
+    </div>
 
     <div id="toastContainer" class="toast-container"></div>
 

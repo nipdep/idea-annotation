@@ -46,6 +46,7 @@ const state = {
   teiXml: "",
   annotations: { concepts: [], arguments: [], created_at: null },
   highlights: [],
+  pendingSelection: null,
   highlightSelection: {
     concept: new Set(),
     argument: new Set(),
@@ -73,7 +74,8 @@ function withBase(path) {
 }
 
 function setHint(message) {
-  el("highlightHint").textContent = message || "";
+  const hint = el("highlightHint");
+  if (hint) hint.textContent = message || "";
 }
 
 function showToast(message, type = "info", options = {}) {
@@ -109,6 +111,131 @@ function updateDescription(kind) {
     .filter((hl) => ids.includes(hl.id))
     .map((hl) => hl.text);
   textarea.value = texts.join("\n\n");
+}
+
+function getSelectionContext(range) {
+  const resolveBlock = (node) => {
+    const element = node.nodeType === 1 ? node : node.parentElement;
+    if (!element) return null;
+    return element.closest(
+      ".doc-paragraph, p, h1, h2, h3, li, td, .tei-figure-desc, .tei-figure-title"
+    );
+  };
+
+  const startBlock = resolveBlock(range.startContainer);
+  const endBlock = resolveBlock(range.endContainer);
+  if (!startBlock || !endBlock || startBlock !== endBlock) return null;
+  const sectionEl = startBlock.closest("[data-section]");
+  return {
+    block: startBlock,
+    section: sectionEl?.dataset.section || "Body",
+  };
+}
+
+function showSelectionMenu(rect) {
+  const menu = el("selectionMenu");
+  if (!menu) return;
+  menu.classList.remove("hidden");
+  menu.style.visibility = "hidden";
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+  const menuWidth = menu.offsetWidth;
+  const menuHeight = menu.offsetHeight;
+  const padding = 8;
+  let left = rect.left + window.scrollX;
+  let top = rect.bottom + window.scrollY + 6;
+
+  if (left + menuWidth > window.innerWidth) {
+    left = window.innerWidth - menuWidth - padding;
+  }
+  if (top + menuHeight > window.innerHeight + window.scrollY) {
+    top = rect.top + window.scrollY - menuHeight - 6;
+  }
+
+  menu.style.left = `${Math.max(padding, left)}px`;
+  menu.style.top = `${Math.max(padding, top)}px`;
+  menu.style.visibility = "visible";
+}
+
+function hideSelectionMenu() {
+  const menu = el("selectionMenu");
+  if (!menu) return;
+  menu.classList.add("hidden");
+}
+
+function handleDocSelection() {
+  const docView = el("docView");
+  if (!docView) return;
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed) {
+    state.pendingSelection = null;
+    hideSelectionMenu();
+    return;
+  }
+
+  const range = selection.getRangeAt(0);
+  if (!docView.contains(range.commonAncestorContainer)) {
+    state.pendingSelection = null;
+    hideSelectionMenu();
+    return;
+  }
+
+  const context = getSelectionContext(range);
+  const text = selection.toString().trim();
+  if (!context || !text) {
+    state.pendingSelection = null;
+    hideSelectionMenu();
+    return;
+  }
+
+  state.pendingSelection = {
+    range: range.cloneRange(),
+    text,
+    section: context.section,
+  };
+  showSelectionMenu(range.getBoundingClientRect());
+}
+
+function commitPendingHighlight(target) {
+  const pending = state.pendingSelection;
+  if (!pending || !pending.range || !pending.text) {
+    showToast("Select text in the document first.", "error");
+    return;
+  }
+
+  try {
+    const mark = document.createElement("mark");
+    const id = `H${state.highlights.length + 1}`;
+    mark.dataset.hid = id;
+    pending.range.surroundContents(mark);
+
+    state.highlights.push({
+      id,
+      text: pending.text,
+      section: pending.section,
+      page: "",
+      used: false,
+    });
+
+    if (target === "argument") {
+      state.highlightSelection.argument.add(id);
+      updateDescription("argument");
+      requestNormalization(pending.text);
+    } else {
+      state.highlightSelection.concept.add(id);
+      const labelInput = el("conceptLabel");
+      if (labelInput && !labelInput.value.trim()) {
+        labelInput.value = pending.text;
+      }
+    }
+
+    window.getSelection().removeAllRanges();
+    state.pendingSelection = null;
+    hideSelectionMenu();
+    renderHighlightPickers();
+  } catch (err) {
+    showToast("Highlight must stay within a single paragraph.", "error");
+  }
 }
 
 async function requestNormalization(text) {
@@ -1470,6 +1597,7 @@ function getByTag(root, tag) {
 
 function renderHighlights() {
   const list = el("highlightList");
+  if (!list) return;
   list.innerHTML = "";
   const available = state.highlights.filter((hl) => !hl.used);
   if (available.length === 0) {
@@ -1503,7 +1631,6 @@ function renderHighlights() {
       removeHighlight(hl.id);
       state.highlightSelection.concept.delete(hl.id);
       state.highlightSelection.argument.delete(hl.id);
-      renderHighlights();
       renderHighlightPickers();
     });
 
@@ -1541,7 +1668,18 @@ function renderHighlightPickers() {
       text.className = "highlight-pill-text";
       text.textContent = hl.text;
 
+      const close = document.createElement("button");
+      close.type = "button";
+      close.className = "highlight-pill-close";
+      close.innerHTML = "&times;";
+      close.addEventListener("click", (event) => {
+        event.stopPropagation();
+        removeHighlight(hl.id);
+        renderHighlightPickers();
+      });
+
       row.appendChild(text);
+      row.appendChild(close);
       row.addEventListener("click", () => {
         if (state.highlightSelection[key].has(hl.id)) {
           state.highlightSelection[key].delete(hl.id);
@@ -1567,6 +1705,7 @@ function removeHighlight(id) {
   state.highlightSelection.concept.delete(id);
   state.highlightSelection.argument.delete(id);
   updateDescription("argument");
+  renderHighlightPickers();
 }
 
 function consumeHighlights(ids) {
@@ -1692,70 +1831,8 @@ function populateSelects() {
   });
 }
 
-function addHighlight() {
-  setHint("");
-  const selection = window.getSelection();
-  if (!selection || selection.isCollapsed) {
-    setHint("Select text in a single paragraph first.");
-    showToast("Select text in a paragraph, then click Add Grounding.", "error");
-    return;
-  }
-
-  const range = selection.getRangeAt(0);
-  const container = range.commonAncestorContainer.nodeType === 1
-    ? range.commonAncestorContainer
-    : range.commonAncestorContainer.parentElement;
-
-  const block = container.closest(
-    ".doc-paragraph, p, h1, h2, h3, li, td, .tei-figure-desc, .tei-figure-title"
-  );
-  const sectionEl = container.closest("[data-section]");
-  let sectionLabel = sectionEl?.dataset.section || "Body";
-
-  if (!block) {
-    setHint("Select text inside the document body.");
-    showToast("Select text inside the document content.", "error");
-    return;
-  }
-
-  try {
-    const mark = document.createElement("mark");
-    const id = `H${state.highlights.length + 1}`;
-    mark.dataset.hid = id;
-    range.surroundContents(mark);
-
-    const text = selection.toString().trim();
-    if (!text) return;
-
-    state.highlights.push({
-      id,
-      text,
-      section: sectionLabel,
-      page: "",
-      used: false,
-    });
-
-    state.highlightSelection.argument.add(id);
-    state.highlightSelection.concept.add(id);
-    updateDescription("argument");
-
-    const activeTab = document.querySelector(".tab.active")?.dataset.tab;
-    if (activeTab === "argument") {
-      requestNormalization(text);
-    } else if (activeTab === "concept") {
-      const labelInput = el("conceptLabel");
-      if (labelInput && !labelInput.value.trim()) {
-        labelInput.value = text;
-      }
-    }
-
-    selection.removeAllRanges();
-    renderHighlights();
-    renderHighlightPickers();
-  } catch (err) {
-    setHint("Highlight must stay within a single paragraph.");
-    showToast("Highlight must stay within a single paragraph.", "error");
-  }
+function addHighlight(target) {
+  commitPendingHighlight(target);
 }
 
 function createConcept() {
@@ -1800,7 +1877,6 @@ function createConcept() {
   renderConceptList();
   renderArgumentConceptRefs();
   renderHighlightPickers();
-  renderHighlights();
 }
 
 function createArgument() {
@@ -1841,7 +1917,6 @@ function createArgument() {
 
   renderArgumentList();
   renderHighlightPickers();
-  renderHighlights();
   renderFlowGuide();
 }
 
@@ -1881,7 +1956,6 @@ async function uploadPdf() {
 
   renderMetadata();
   renderDoc();
-  renderHighlights();
   renderHighlightPickers();
   renderConceptList();
   renderArgumentList();
@@ -1973,11 +2047,31 @@ function wireNavigation() {
   });
 }
 
+function wireSelectionMenu() {
+  const menu = el("selectionMenu");
+  if (!menu) return;
+  menu.querySelectorAll("button").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      commitPendingHighlight(button.dataset.action);
+    });
+  });
+
+  menu.addEventListener("mousedown", (event) => event.stopPropagation());
+
+  document.addEventListener("mousedown", (event) => {
+    if (!menu.contains(event.target)) {
+      hideSelectionMenu();
+    }
+  });
+
+  document.addEventListener("scroll", hideSelectionMenu, true);
+}
+
 function init() {
   populateSelects();
   renderMetadata();
   renderDoc();
-  renderHighlights();
   renderHighlightPickers();
   renderConceptList();
   renderArgumentList();
@@ -1989,11 +2083,13 @@ function init() {
   wireTabs();
   wireNavigation();
   wireLibraryControls();
+  wireSelectionMenu();
 
   el("paperInfo").textContent = "Files will save under dataset/papers/";
 
   el("uploadBtn").addEventListener("click", uploadPdf);
-  el("addHighlightBtn").addEventListener("click", addHighlight);
+  el("docView").addEventListener("mouseup", handleDocSelection);
+  el("docView").addEventListener("keyup", handleDocSelection);
   el("addConceptBtn").addEventListener("click", createConcept);
   el("addArgumentBtn").addEventListener("click", createArgument);
   el("submitBtn").addEventListener("click", submitAnnotations);
