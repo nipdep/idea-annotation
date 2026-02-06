@@ -59,6 +59,7 @@ const state = {
     loaded: false,
     expanded: new Set(),
     selectedInstance: null,
+    graphPositions: {},
   },
 };
 
@@ -467,19 +468,20 @@ function renderPaperFocusedGraph(svg, item) {
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
 
   const groups = buildArgumentGroups(item);
+  const positionCache = state.library.graphPositions;
 
   const nodes = [
     { id: "Work", label: "Work", type: "paper", r: 22, fx: width / 2, fy: 70 },
     { id: "Argument", label: "Argument", type: "class", r: 20, fx: width / 2, fy: 150 },
-    { id: "Issue", label: "Issue", type: "class", r: 18, x: 180, y: 250 },
-    { id: "Idea", label: "Idea", type: "class", r: 18, x: 620, y: 250 },
-    { id: "Approach", label: "Approach", type: "class", r: 18, x: 400, y: 250 },
-    { id: "Backing", label: "Backing", type: "class", r: 16, x: 90, y: 340 },
-    { id: "Evidence", label: "Evidence", type: "class", r: 16, x: 360, y: 340 },
-    { id: "Claim", label: "Claim", type: "class", r: 16, x: 640, y: 340 },
-    { id: "Warrant", label: "Warrant", type: "class", r: 16, x: 520, y: 300 },
-    { id: "Assumption", label: "Assumption", type: "class", r: 14, x: 470, y: 440 },
-    { id: "Artifact", label: "Artifact", type: "class", r: 14, x: 300, y: 440 },
+    { id: "Issue", label: "Issue", type: "class", r: 18, fx: 180, fy: 250 },
+    { id: "Idea", label: "Idea", type: "class", r: 18, fx: 620, fy: 250 },
+    { id: "Approach", label: "Approach", type: "class", r: 18, fx: 400, fy: 250 },
+    { id: "Backing", label: "Backing", type: "class", r: 16, fx: 90, fy: 340 },
+    { id: "Evidence", label: "Evidence", type: "class", r: 16, fx: 360, fy: 340 },
+    { id: "Claim", label: "Claim", type: "class", r: 16, fx: 640, fy: 340 },
+    { id: "Warrant", label: "Warrant", type: "class", r: 16, fx: 520, fy: 300 },
+    { id: "Assumption", label: "Assumption", type: "class", r: 14, fx: 470, fy: 440 },
+    { id: "Artifact", label: "Artifact", type: "class", r: 14, fx: 300, fy: 440 },
   ];
 
   const links = [
@@ -504,6 +506,9 @@ function renderPaperFocusedGraph(svg, item) {
     const instances = groups[node.id] || [];
     if (!instances.length || !state.library.expanded.has(node.id)) return;
     instances.forEach((inst, idx) => {
+      const parent = nodes.find((n) => n.id === node.id);
+      const angle = (2 * Math.PI * idx) / instances.length;
+      const radius = 40;
       nodes.push({
         id: `${node.id}:${inst.id}`,
         label: inst.label,
@@ -511,6 +516,8 @@ function renderPaperFocusedGraph(svg, item) {
         r: 12,
         parent: node.id,
         instance: inst,
+        x: parent ? parent.fx + radius * Math.cos(angle) : undefined,
+        y: parent ? parent.fy + radius * Math.sin(angle) : undefined,
       });
       links.push({
         source: node.id,
@@ -519,6 +526,14 @@ function renderPaperFocusedGraph(svg, item) {
         distance: 55 + idx * 2,
       });
     });
+  });
+
+  nodes.forEach((node) => {
+    const cached = positionCache[node.id];
+    if (cached) {
+      node.x = cached.x;
+      node.y = cached.y;
+    }
   });
 
   const svgSel = window.d3.select(svg);
@@ -556,13 +571,28 @@ function renderPaperFocusedGraph(svg, item) {
     .attr("font-size", "11")
     .text("Click background to return to paper graph");
 
+  const defs = svgSel.append("defs");
+  defs
+    .append("marker")
+    .attr("id", "arrowhead")
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 10)
+    .attr("refY", 0)
+    .attr("markerWidth", 6)
+    .attr("markerHeight", 6)
+    .attr("orient", "auto")
+    .append("path")
+    .attr("d", "M0,-5L10,0L0,5")
+    .attr("fill", "#d0c6bd");
+
   const link = svgSel
     .append("g")
     .attr("stroke", "#d0c6bd")
     .selectAll("line")
     .data(links)
     .join("line")
-    .attr("stroke-width", 1.2);
+    .attr("stroke-width", 1.2)
+    .attr("marker-end", "url(#arrowhead)");
 
   const linkLabel = svgSel
     .append("g")
@@ -636,6 +666,8 @@ function renderPaperFocusedGraph(svg, item) {
     .force("charge", window.d3.forceManyBody().strength(-280))
     .force("center", window.d3.forceCenter(width / 2, height / 2))
     .force("collision", window.d3.forceCollide().radius((d) => d.r + 10))
+    .alpha(0.4)
+    .alphaDecay(0.15)
     .on("tick", () => {
       link
         .attr("x1", (d) => d.source.x)
@@ -648,6 +680,10 @@ function renderPaperFocusedGraph(svg, item) {
         .attr("y", (d) => (d.source.y + d.target.y) / 2 - 6);
 
       node.attr("transform", (d) => `translate(${d.x}, ${d.y})`);
+
+      nodes.forEach((d) => {
+        positionCache[d.id] = { x: d.x, y: d.y };
+      });
     });
 }
 
