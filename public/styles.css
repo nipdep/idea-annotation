@@ -514,10 +514,11 @@ textarea[readonly] {
 }
 
 .submit-panel-min {
-  padding: 0;
-  border: none;
-  box-shadow: none;
-  background: transparent;
+  padding: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
   display: flex;
   align-items: stretch;
 }
