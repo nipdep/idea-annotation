@@ -115,20 +115,11 @@ function updateDescription(kind) {
 }
 
 function getSelectionContext(range) {
-  const resolveBlock = (node) => {
-    const element = node.nodeType === 1 ? node : node.parentElement;
-    if (!element) return null;
-    return element.closest(
-      ".doc-paragraph, p, h1, h2, h3, li, td, .tei-figure-desc, .tei-figure-title"
-    );
-  };
-
-  const startBlock = resolveBlock(range.startContainer);
-  const endBlock = resolveBlock(range.endContainer);
-  if (!startBlock || !endBlock || startBlock !== endBlock) return null;
-  const sectionEl = startBlock.closest("[data-section]");
+  const element = range.commonAncestorContainer.nodeType === 1
+    ? range.commonAncestorContainer
+    : range.commonAncestorContainer.parentElement;
+  const sectionEl = element ? element.closest("[data-section]") : null;
   return {
-    block: startBlock,
     section: sectionEl?.dataset.section || "Body",
   };
 }
@@ -208,7 +199,13 @@ function commitPendingHighlight(target) {
     const mark = document.createElement("mark");
     const id = `H${state.highlights.length + 1}`;
     mark.dataset.hid = id;
-    pending.range.surroundContents(mark);
+    try {
+      pending.range.surroundContents(mark);
+    } catch (err) {
+      const contents = pending.range.extractContents();
+      mark.appendChild(contents);
+      pending.range.insertNode(mark);
+    }
 
     state.highlights.push({
       id,
@@ -239,7 +236,7 @@ function commitPendingHighlight(target) {
     hideSelectionMenu();
     renderHighlightPickers();
   } catch (err) {
-    showToast("Highlight must stay within a single paragraph.", "error");
+    showToast("Could not create highlight. Try a smaller selection.", "error");
   }
 }
 
