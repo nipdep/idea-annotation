@@ -203,6 +203,11 @@ body {
   height: 100%;
 }
 
+#libraryDetailBody {
+  overflow-y: auto;
+  min-height: 0;
+}
+
 .guidelines .panel {
   min-height: calc(100vh - 180px);
 }
