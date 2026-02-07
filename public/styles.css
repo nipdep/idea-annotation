@@ -85,7 +85,8 @@ body {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--ink);
-  padding: 8px 14px;
+  padding: 12px 22px;
+  font-size: 1rem;
   border-radius: 999px;
 }
 
