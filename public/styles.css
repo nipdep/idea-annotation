@@ -309,6 +309,10 @@ button:hover {
   content: "-";
 }
 
+#docExpandBtn {
+  display: none;
+}
+
 .collapse-handle {
   position: absolute;
   top: 50%;
