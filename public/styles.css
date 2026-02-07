@@ -347,7 +347,7 @@ textarea[readonly] {
 
 .left-stack {
   display: grid;
-  grid-template-rows: 190px 1fr 110px;
+  grid-template-rows: 150px 1fr 110px;
   gap: 18px;
   height: calc(100vh - 120px);
   min-height: 0;
@@ -362,6 +362,26 @@ textarea[readonly] {
 
 .left-stack .panel {
   min-height: 0;
+}
+
+.right-stack {
+  display: grid;
+  grid-template-rows: 1fr 120px;
+  gap: 18px;
+  height: calc(100vh - 120px);
+  min-height: 0;
+}
+
+.right-stack .panel {
+  min-height: 0;
+}
+
+#uploadPanel {
+  min-height: 0;
+}
+
+#flowPanel {
+  padding-bottom: 12px;
 }
 
 #submitPanel {
@@ -726,7 +746,7 @@ mark.used {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 190px;
+  max-height: 260px;
   overflow-y: auto;
   padding-right: 4px;
 }

@@ -72,56 +72,60 @@
         <div id="docView" class="doc-view"></div>
       </section>
 
-      <section class="panel" id="annotatePanel">
-        <div class="panel-header">
-          <h2>Annotation Builder</h2>
-        </div>
+      <aside class="right-stack">
+        <section class="panel" id="annotatePanel">
+          <div class="panel-header">
+            <h2>Annotation Builder</h2>
+          </div>
 
-        <div class="guide">
-          <div class="subhead">Suggested Flow</div>
+          <div class="tab-bar">
+            <button class="tab active" data-tab="concept">Concept</button>
+            <button class="tab" data-tab="argument">Argument</button>
+          </div>
+
+          <div id="conceptTab" class="tab-content active">
+            <div class="stack">
+              <label>Label <span class="required">*</span><input id="conceptLabel" type="text" placeholder="e.g., Latent Dirichlet Allocation" /></label>
+              <label>Aliases <input id="conceptAliases" type="text" placeholder="Comma-separated" /></label>
+              <label>Category <span class="required">*</span></label>
+              <div id="conceptTypePicker" class="type-picker"></div>
+              <div id="conceptTypePath" class="muted"></div>
+            </div>
+            <div class="stack">
+              <div class="subhead">Source refs</div>
+              <div id="highlightPicker"></div>
+            </div>
+            <button id="addConceptBtn">Add Concept</button>
+          </div>
+
+          <div id="argumentTab" class="tab-content">
+            <div class="stack">
+              <label>Canonical Text <span class="required">*</span>
+                <textarea id="argumentText" rows="4" placeholder="Minimal assertion..."></textarea>
+              </label>
+              <label>Type <span class="required">*</span>
+                <select id="argumentType"></select>
+              </label>
+              <label>Concept refs
+                <div id="argumentConceptRefs" class="tag-list"></div>
+              </label>
+            </div>
+            <div class="stack">
+              <div class="subhead">Source refs</div>
+              <div id="highlightPickerArgument"></div>
+            </div>
+            <button id="addArgumentBtn">Add Argument</button>
+          </div>
+
+        </section>
+
+        <section class="panel" id="flowPanel">
+          <div class="panel-header">
+            <h2>Suggested Flow</h2>
+          </div>
           <div id="flowGuide" class="flow-list"></div>
-        </div>
-
-        <div class="tab-bar">
-          <button class="tab active" data-tab="concept">Concept</button>
-          <button class="tab" data-tab="argument">Argument</button>
-        </div>
-
-        <div id="conceptTab" class="tab-content active">
-          <div class="stack">
-            <label>Label <span class="required">*</span><input id="conceptLabel" type="text" placeholder="e.g., Latent Dirichlet Allocation" /></label>
-            <label>Aliases <input id="conceptAliases" type="text" placeholder="Comma-separated" /></label>
-            <label>Category <span class="required">*</span></label>
-            <div id="conceptTypePicker" class="type-picker"></div>
-            <div id="conceptTypePath" class="muted"></div>
-          </div>
-          <div class="stack">
-            <div class="subhead">Source refs</div>
-            <div id="highlightPicker"></div>
-          </div>
-          <button id="addConceptBtn">Add Concept</button>
-        </div>
-
-        <div id="argumentTab" class="tab-content">
-          <div class="stack">
-            <label>Canonical Text <span class="required">*</span>
-              <textarea id="argumentText" rows="4" placeholder="Minimal assertion..."></textarea>
-            </label>
-            <label>Type <span class="required">*</span>
-              <select id="argumentType"></select>
-            </label>
-            <label>Concept refs
-              <div id="argumentConceptRefs" class="tag-list"></div>
-            </label>
-          </div>
-          <div class="stack">
-            <div class="subhead">Source refs</div>
-            <div id="highlightPickerArgument"></div>
-          </div>
-          <button id="addArgumentBtn">Add Argument</button>
-        </div>
-
-      </section>
+        </section>
+      </aside>
       </main>
     </div>
 
