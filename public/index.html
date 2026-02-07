@@ -63,11 +63,13 @@
           </div>
           <button id="submitBtn" class="primary">Submit Annotations</button>
         </section>
+        <button id="leftCollapseBtn" class="collapse-handle" type="button" aria-label="Collapse sidebar"></button>
       </aside>
 
       <section class="panel doc-panel">
         <div class="panel-header">
           <h2>Document</h2>
+          <button id="docExpandBtn" class="icon-btn" type="button" aria-label="Expand document view" title="Expand document view"></button>
         </div>
         <div id="docView" class="doc-view"></div>
       </section>
@@ -91,7 +93,7 @@
               <div id="conceptTypePicker" class="type-picker"></div>
               <div id="conceptTypePath" class="muted"></div>
             </div>
-            <div class="stack">
+            <div class="stack source-refs">
               <div class="subhead">Source refs</div>
               <div id="highlightPicker"></div>
             </div>
@@ -110,7 +112,7 @@
                 <div id="argumentConceptRefs" class="tag-list"></div>
               </label>
             </div>
-            <div class="stack">
+            <div class="stack source-refs">
               <div class="subhead">Source refs</div>
               <div id="highlightPickerArgument"></div>
             </div>

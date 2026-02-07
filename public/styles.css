@@ -366,7 +366,7 @@ textarea[readonly] {
 
 .right-stack {
   display: grid;
-  grid-template-rows: 1fr 120px;
+  grid-template-rows: 1fr 130px;
   gap: 18px;
   height: calc(100vh - 120px);
   min-height: 0;
@@ -382,6 +382,26 @@ textarea[readonly] {
 
 #flowPanel {
   padding-bottom: 12px;
+}
+
+#annotatePanel {
+  min-height: 0;
+}
+
+#annotatePanel .tab-content.active {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+#annotatePanel .tab-content.active .stack {
+  flex: 0 0 auto;
+}
+
+#annotatePanel .tab-content.active .source-refs {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 #submitPanel {
@@ -746,9 +766,11 @@ mark.used {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 260px;
+  max-height: none;
   overflow-y: auto;
   padding-right: 4px;
+  flex: 1;
+  min-height: 0;
 }
 
 .tag {
@@ -880,16 +902,39 @@ mark.used {
 }
 
 .flow-list {
-  display: grid;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
 .flow-item {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
+  font-size: 0.85rem;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #f4efe8;
+  color: var(--ink);
+}
+
+.flow-item.done {
+  background: #cfead4;
+  border-color: #7bbf8b;
+  color: #2f5f41;
+}
+
+.flow-item.missing {
+  background: #fde7dd;
+  border-color: #e1a08b;
+  color: #8a3f2b;
+}
+
+.flow-arrow {
+  color: #9c8d81;
   font-size: 0.9rem;
 }
 

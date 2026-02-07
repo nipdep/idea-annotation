@@ -364,40 +364,35 @@ function renderFlowGuide() {
     { label: "Idea", required: ["idea"] },
     { label: "Approach", required: ["approach"] },
     {
-      label: "Experiments (design, goal, hypothesis, result)",
+      label: "Experiment + Warrants",
       optional: [
         "experiment",
         "experiment design",
         "experiment goal",
         "experiment hypothesis",
         "experiment result",
+        "warrant",
       ],
     },
-    { label: "Claims + Warrants", required: ["claim"], optional: ["warrant", "central argument"] },
+    { label: "Claim", required: ["claim", "central argument"] },
   ];
 
-  steps.forEach((step) => {
+  steps.forEach((step, index) => {
     const item = document.createElement("div");
-    item.className = "flow-item";
-
-    const label = document.createElement("div");
-    label.textContent = step.label;
-
-    const badge = document.createElement("span");
-    const requiredMissing = (step.required || []).some((type) => !present.has(type));
+    const requiredMissing = (step.required || []).every((type) => !present.has(type));
     const optionalHit = (step.optional || []).some((type) => present.has(type));
+    const isDone = step.required?.length ? !requiredMissing : optionalHit;
 
-    if (step.required?.length) {
-      badge.className = `badge ${requiredMissing ? "missing" : "done"}`;
-      badge.textContent = requiredMissing ? "Required" : "Done";
-    } else {
-      badge.className = `badge ${optionalHit ? "done" : ""}`;
-      badge.textContent = optionalHit ? "Done" : "Optional";
-    }
-
-    item.appendChild(label);
-    item.appendChild(badge);
+    item.className = `flow-item${isDone ? " done" : ""}${step.required?.length && requiredMissing ? " missing" : ""}`;
+    item.textContent = step.label;
     container.appendChild(item);
+
+    if (index < steps.length - 1) {
+      const arrow = document.createElement("span");
+      arrow.className = "flow-arrow";
+      arrow.textContent = "→";
+      container.appendChild(arrow);
+    }
   });
 }
 
