@@ -286,6 +286,62 @@ button:hover {
   box-shadow: 0 8px 16px rgba(192, 86, 53, 0.25);
 }
 
+.icon-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #f4efe8;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn::before {
+  content: "+";
+}
+
+#annotatorPage.doc-expanded .icon-btn::before {
+  content: "-";
+}
+
+.collapse-handle {
+  position: absolute;
+  top: 50%;
+  right: -10px;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 48px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #f4efe8;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+
+.collapse-handle::before {
+  content: "<";
+  font-size: 16px;
+  line-height: 1;
+}
+
+#annotatorPage.left-collapsed .collapse-handle {
+  right: 4px;
+}
+
+#annotatorPage.left-collapsed .collapse-handle::before {
+  content: ">";
+}
+
 button.ghost {
   background: transparent;
   color: var(--accent);
@@ -351,6 +407,31 @@ textarea[readonly] {
   gap: 18px;
   height: calc(100vh - 120px);
   min-height: 0;
+  position: relative;
+}
+
+#annotatorPage.left-collapsed .app-grid {
+  grid-template-columns: 28px minmax(0, 2.9fr) minmax(0, 1.05fr);
+}
+
+#annotatorPage.left-collapsed .left-stack > section {
+  display: none;
+}
+
+#annotatorPage.left-collapsed .left-stack {
+  padding: 0;
+}
+
+#annotatorPage.doc-expanded .app-grid {
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 3.4fr) 0;
+}
+
+#annotatorPage.doc-expanded .right-stack {
+  display: none;
+}
+
+#annotatorPage.doc-expanded.left-collapsed .app-grid {
+  grid-template-columns: 28px minmax(0, 1fr) 0;
 }
 
 .scrollable {

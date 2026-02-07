@@ -2097,6 +2097,23 @@ function init() {
   el("addConceptBtn").addEventListener("click", createConcept);
   el("addArgumentBtn").addEventListener("click", createArgument);
   el("submitBtn").addEventListener("click", submitAnnotations);
+  const leftCollapseBtn = el("leftCollapseBtn");
+  if (leftCollapseBtn) {
+    leftCollapseBtn.addEventListener("click", () => {
+      const page = el("annotatorPage");
+      if (!page) return;
+      page.classList.toggle("left-collapsed");
+    });
+  }
+
+  const docExpandBtn = el("docExpandBtn");
+  if (docExpandBtn) {
+    docExpandBtn.addEventListener("click", () => {
+      const page = el("annotatorPage");
+      if (!page) return;
+      page.classList.toggle("doc-expanded");
+    });
+  }
 }
 
 init();
