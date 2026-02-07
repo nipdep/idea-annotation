@@ -704,8 +704,11 @@ mark.used {
 
 .tag-list {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 190px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .tag {
