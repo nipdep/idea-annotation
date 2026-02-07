@@ -224,6 +224,8 @@ function commitPendingHighlight(target) {
       updateDescription("argument");
       requestNormalization(pending.text);
     } else {
+      const existingConceptIds = Array.from(state.highlightSelection.concept);
+      existingConceptIds.forEach((existingId) => removeHighlight(existingId));
       state.highlightSelection.concept.clear();
       state.highlightSelection.concept.add(id);
       const labelInput = el("conceptLabel");
@@ -1681,10 +1683,9 @@ function renderHighlightPickers() {
         }
 
         if (key === "concept") {
+          const existingConceptIds = Array.from(state.highlightSelection.concept);
+          existingConceptIds.forEach((existingId) => removeHighlight(existingId));
           state.highlightSelection.concept.clear();
-          container.querySelectorAll(".highlight-pill.selected").forEach((pill) => {
-            pill.classList.remove("selected");
-          });
         }
 
         state.highlightSelection[key].add(hl.id);
@@ -2039,13 +2040,6 @@ function wireTabs() {
       document.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
       tab.classList.add("active");
       el(`${tab.dataset.tab}Tab`).classList.add("active");
-
-      if (tab.dataset.tab === "concept") {
-        state.highlightSelection.argument.clear();
-        updateDescription("argument");
-      } else if (tab.dataset.tab === "argument") {
-        state.highlightSelection.concept.clear();
-      }
       renderHighlightPickers();
     });
   });
