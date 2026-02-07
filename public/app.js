@@ -48,6 +48,7 @@ const state = {
   highlights: [],
   pendingSelection: null,
   argumentDescription: "",
+  docMode: "text",
   highlightSelection: {
     concept: new Set(),
     argument: new Set(),
@@ -1326,6 +1327,31 @@ function renderDoc() {
   });
 }
 
+function updatePdfSrc() {
+  const frame = el("pdfFrame");
+  const placeholder = el("pdfPlaceholder");
+  if (!frame || !placeholder) return;
+  if (!state.paperId) {
+    frame.removeAttribute("src");
+    placeholder.style.display = "block";
+    return;
+  }
+  frame.src = withBase(`/api/paper/${state.paperId}/pdf`);
+  placeholder.style.display = "none";
+}
+
+function setDocMode(mode) {
+  state.docMode = mode;
+  const textPane = el("docTextPane");
+  const pdfPane = el("docPdfPane");
+  if (textPane) textPane.classList.toggle("active", mode === "text");
+  if (pdfPane) pdfPane.classList.toggle("active", mode === "pdf");
+  document.querySelectorAll(".doc-toggle-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.doc === mode);
+  });
+  if (mode === "pdf") updatePdfSrc();
+}
+
 function renderTeiDoc(teiXml, docView) {
   const parser = new DOMParser();
   const xml = parser.parseFromString(teiXml, "text/xml");
@@ -1980,6 +2006,7 @@ async function uploadPdf() {
   } else {
     showToast("Paper loaded and ready to annotate.", "success");
   }
+  updatePdfSrc();
 }
 
 function validateRequiredArguments() {
@@ -2095,6 +2122,7 @@ function init() {
   wireNavigation();
   wireLibraryControls();
   wireSelectionMenu();
+  setDocMode(state.docMode);
 
   const info = el("paperInfo");
   if (info) {
@@ -2107,6 +2135,11 @@ function init() {
   el("addConceptBtn").addEventListener("click", createConcept);
   el("addArgumentBtn").addEventListener("click", createArgument);
   el("submitBtn").addEventListener("click", submitAnnotations);
+  document.querySelectorAll(".doc-toggle-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setDocMode(btn.dataset.doc);
+    });
+  });
   const leftCollapseBtn = el("leftCollapseBtn");
   if (leftCollapseBtn) {
     leftCollapseBtn.addEventListener("click", () => {

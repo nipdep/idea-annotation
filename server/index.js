@@ -244,6 +244,19 @@ app.get("/api/paper/:id", (req, res) => {
   }
 });
 
+app.get("/api/paper/:id/pdf", (req, res) => {
+  try {
+    const paperId = req.params.id;
+    const pdfPath = paperPath(paperId, "pdf");
+    if (!fs.existsSync(pdfPath)) {
+      return res.status(404).json({ error: "PDF not found" });
+    }
+    res.sendFile(pdfPath);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post("/api/annotation/:id", (req, res) => {
   try {
     ensureDir(DATASET_DIR);

@@ -71,7 +71,19 @@
           <h2>Document</h2>
           <button id="docExpandBtn" class="icon-btn" type="button" aria-label="Expand document view" title="Expand document view"></button>
         </div>
-        <div id="docView" class="doc-view"></div>
+        <div class="doc-toggle">
+          <button class="doc-toggle-btn active" data-doc="text">Text View</button>
+          <button class="doc-toggle-btn" data-doc="pdf">PDF View</button>
+        </div>
+        <div id="docTextPane" class="doc-pane active">
+          <div id="docView" class="doc-view"></div>
+        </div>
+        <div id="docPdfPane" class="doc-pane">
+          <div class="pdf-wrap">
+            <div id="pdfPlaceholder" class="muted">Upload a paper to view the PDF.</div>
+            <iframe id="pdfFrame" title="PDF preview"></iframe>
+          </div>
+        </div>
       </section>
 
       <aside class="right-stack">
