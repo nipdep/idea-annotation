@@ -441,7 +441,7 @@ textarea[readonly] {
 
 .left-stack {
   display: grid;
-  grid-template-rows: 130px 1fr 110px;
+  grid-template-rows: 130px 1fr;
   gap: 18px;
   height: calc(100vh - 120px);
   min-height: 0;
@@ -489,7 +489,7 @@ textarea[readonly] {
 
 .right-stack {
   display: grid;
-  grid-template-rows: 1fr 130px;
+  grid-template-rows: 1fr 140px;
   gap: 18px;
   height: calc(100vh - 120px);
   min-height: 0;
@@ -503,7 +503,7 @@ textarea[readonly] {
   min-height: 0;
 }
 
-#flowPanel {
+#submitPanel {
   padding-bottom: 12px;
 }
 
@@ -1088,53 +1088,6 @@ mark.used {
   background: #fffaf2;
 }
 
-.flow-list {
-  display: flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 8px;
-  margin-top: 4px;
-  overflow-x: auto;
-  padding-bottom: 6px;
-}
-
-.flow-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.85rem;
-  padding: 6px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: #f4efe8;
-  color: var(--ink);
-  white-space: nowrap;
-  max-width: 100%;
-}
-
-.flow-item.done {
-  background: #cfead4;
-  border-color: #7bbf8b;
-  color: #2f5f41;
-}
-
-.flow-item.missing {
-  background: #fde7dd;
-  border-color: #e1a08b;
-  color: #8a3f2b;
-}
-
-.flow-item::after {
-  content: "→";
-  color: #9c8d81;
-  font-size: 0.9rem;
-  margin-left: 6px;
-}
-
-.flow-item:last-child::after {
-  content: "";
-  margin-left: 0;
-}
 
 .badge {
   display: inline-flex;

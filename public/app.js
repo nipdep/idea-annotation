@@ -352,45 +352,6 @@ function normalizeArgType(value) {
   return String(value || "").toLowerCase();
 }
 
-function renderFlowGuide() {
-  const container = el("flowGuide");
-  if (!container) return;
-  container.innerHTML = "";
-
-  const present = new Set(
-    (state.annotations.arguments || []).map((arg) => normalizeArgType(arg.arg_type))
-  );
-
-  const steps = [
-    { label: "Issue + Backing", required: ["issue"], optional: ["backing"] },
-    { label: "Idea", required: ["idea"] },
-    { label: "Approach", required: ["approach"] },
-    {
-      label: "Experiment + Warrants",
-      optional: [
-        "experiment",
-        "experiment design",
-        "experiment goal",
-        "experiment hypothesis",
-        "experiment result",
-        "warrant",
-      ],
-    },
-    { label: "Claim", required: ["claim", "central argument"] },
-  ];
-
-  steps.forEach((step) => {
-    const item = document.createElement("div");
-    const requiredMissing = (step.required || []).every((type) => !present.has(type));
-    const optionalHit = (step.optional || []).some((type) => present.has(type));
-    const isDone = step.required?.length ? !requiredMissing : optionalHit;
-
-    item.className = `flow-item${isDone ? " done" : ""}${step.required?.length && requiredMissing ? " missing" : ""}`;
-    item.textContent = step.label;
-    container.appendChild(item);
-  });
-}
-
 function flattenAuthors(authors) {
   if (!authors) return "";
   if (Array.isArray(authors)) return authors.join(" ");
@@ -1809,7 +1770,6 @@ function renderArgumentList() {
     remove.addEventListener("click", () => {
       state.annotations.arguments = state.annotations.arguments.filter((a) => a.argument_id !== argument.argument_id);
       renderArgumentList();
-      renderFlowGuide();
     });
 
     item.appendChild(info);
@@ -1949,7 +1909,6 @@ function createArgument() {
 
   renderArgumentList();
   renderHighlightPickers();
-  renderFlowGuide();
 }
 
 async function uploadPdf() {
@@ -1998,7 +1957,6 @@ async function uploadPdf() {
   renderArgumentConceptRefs();
   renderConceptTypePicker();
   renderConceptTypePath();
-  renderFlowGuide();
   updateDescription("argument");
   if (loadingToast) loadingToast.remove();
   if (data.existing) {
@@ -2024,12 +1982,14 @@ async function submitAnnotations() {
 
   const missing = validateRequiredArguments();
   if (missing.length) {
+    const present = requiredArgumentTypes.filter((type) => !missing.includes(type));
     showToast(
-      `Missing required arguments: ${missing.map(formatTypeLabel).join(", ")}`,
+      `Required: ${requiredArgumentTypes.map(formatTypeLabel).join(", ")}. ` +
+      `Annotated: ${present.length ? present.map(formatTypeLabel).join(", ") : "None"}. ` +
+      `Missing: ${missing.map(formatTypeLabel).join(", ")}.`,
       "error",
       { duration: 4000 }
     );
-    renderFlowGuide();
     return;
   }
 
@@ -2116,7 +2076,6 @@ function init() {
   renderArgumentConceptRefs();
   renderConceptTypePicker();
   renderConceptTypePath();
-  renderFlowGuide();
   updateDescription("argument");
   wireTabs();
   wireNavigation();
@@ -2135,11 +2094,6 @@ function init() {
   el("addConceptBtn").addEventListener("click", createConcept);
   el("addArgumentBtn").addEventListener("click", createArgument);
   el("submitBtn").addEventListener("click", submitAnnotations);
-  document.querySelectorAll(".doc-toggle-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      setDocMode(btn.dataset.doc);
-    });
-  });
   const leftCollapseBtn = el("leftCollapseBtn");
   if (leftCollapseBtn) {
     leftCollapseBtn.addEventListener("click", () => {
