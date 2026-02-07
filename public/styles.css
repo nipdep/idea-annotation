@@ -917,6 +917,9 @@ mark.used {
 
 .required.tight {
   margin-left: 0;
+  position: relative;
+  top: -8px;
+  left: -6px;
 }
 
 .list-block {
