@@ -1021,6 +1021,7 @@ mark.used {
   border: 1px solid var(--border);
   background: #f4efe8;
   color: var(--ink);
+  white-space: nowrap;
 }
 
 .flow-item.done {
@@ -1035,9 +1036,16 @@ mark.used {
   color: #8a3f2b;
 }
 
-.flow-arrow {
+.flow-item::after {
+  content: "→";
   color: #9c8d81;
   font-size: 0.9rem;
+  margin-left: 8px;
+}
+
+.flow-item:last-child::after {
+  content: "";
+  margin-left: 0;
 }
 
 .badge {

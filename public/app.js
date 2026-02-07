@@ -379,7 +379,7 @@ function renderFlowGuide() {
     { label: "Claim", required: ["claim", "central argument"] },
   ];
 
-  steps.forEach((step, index) => {
+  steps.forEach((step) => {
     const item = document.createElement("div");
     const requiredMissing = (step.required || []).every((type) => !present.has(type));
     const optionalHit = (step.optional || []).some((type) => present.has(type));
@@ -388,13 +388,6 @@ function renderFlowGuide() {
     item.className = `flow-item${isDone ? " done" : ""}${step.required?.length && requiredMissing ? " missing" : ""}`;
     item.textContent = step.label;
     container.appendChild(item);
-
-    if (index < steps.length - 1) {
-      const arrow = document.createElement("span");
-      arrow.className = "flow-arrow";
-      arrow.textContent = "→";
-      container.appendChild(arrow);
-    }
   });
 }
 
