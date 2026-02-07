@@ -485,7 +485,7 @@ textarea[readonly] {
 
 .right-stack {
   display: grid;
-  grid-template-rows: 1fr 140px;
+  grid-template-rows: 1fr;
   gap: 18px;
   height: calc(100vh - 120px);
   min-height: 0;
@@ -497,10 +497,6 @@ textarea[readonly] {
 
 #uploadPanel {
   min-height: 0;
-}
-
-#submitPanel {
-  padding-bottom: 12px;
 }
 
 #annotatePanel {
@@ -515,6 +511,16 @@ textarea[readonly] {
   gap: 12px;
   min-height: 0;
   flex: 1;
+}
+
+.submit-bar {
+  margin-top: auto;
+  display: flex;
+  justify-content: stretch;
+}
+
+.submit-bar .primary {
+  width: 100%;
 }
 
 #annotatePanel .tab-content.active .stack {
