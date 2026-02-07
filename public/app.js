@@ -2157,6 +2157,13 @@ function init() {
       page.classList.toggle("doc-expanded");
     });
   }
+
+  const docSwapBtn = el("docSwapBtn");
+  if (docSwapBtn) {
+    docSwapBtn.addEventListener("click", () => {
+      setDocMode(state.docMode === "text" ? "pdf" : "text");
+    });
+  }
 }
 
 init();

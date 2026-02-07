@@ -332,6 +332,15 @@ button:hover {
   display: none;
 }
 
+.doc-swap::before {
+  content: "⇆";
+  font-size: 14px;
+}
+
+.doc-panel .panel-header {
+  gap: 8px;
+}
+
 .collapse-handle {
   position: absolute;
   top: 50%;
