@@ -137,8 +137,8 @@ body {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--ink);
-  padding: 8px 14px;
-  border-radius: 999px;
+  padding: 10px 16px;
+  border-radius: 10px;
 }
 
 .view-toggle .toggle.active {
