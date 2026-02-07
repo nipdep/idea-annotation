@@ -60,11 +60,6 @@ body {
   gap: 16px;
 }
 
-.app-logo {
-  width: 58px;
-  height: 58px;
-}
-
 .app-title {
   font-size: 28px;
   text-transform: uppercase;
