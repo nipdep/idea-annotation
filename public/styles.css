@@ -403,11 +403,15 @@ textarea[readonly] {
 
 .left-stack {
   display: grid;
-  grid-template-rows: 150px 1fr 110px;
+  grid-template-rows: 130px 1fr 110px;
   gap: 18px;
   height: calc(100vh - 120px);
   min-height: 0;
   position: relative;
+}
+
+#uploadPanel {
+  padding-bottom: 10px;
 }
 
 #annotatorPage.left-collapsed .app-grid {
