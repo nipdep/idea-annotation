@@ -216,6 +216,7 @@ function commitPendingHighlight(target) {
       section: pending.section,
       page: "",
       used: false,
+      target,
     });
 
     if (target === "argument") {
@@ -1649,7 +1650,7 @@ function renderHighlightPickers() {
     const container = el(id);
     container.innerHTML = "";
 
-    const available = state.highlights.filter((h) => !h.used);
+    const available = state.highlights.filter((h) => !h.used && (!h.target || h.target === key));
     if (available.length === 0) {
       container.innerHTML = '<div class="muted">No highlights to attach.</div>';
       return;
