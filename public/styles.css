@@ -485,7 +485,7 @@ textarea[readonly] {
 
 .right-stack {
   display: grid;
-  grid-template-rows: 1fr;
+  grid-template-rows: 1fr 90px;
   gap: 18px;
   height: calc(100vh - 120px);
   min-height: 0;
@@ -513,13 +513,13 @@ textarea[readonly] {
   flex: 1;
 }
 
-.submit-bar {
-  margin-top: auto;
+.submit-panel-min {
+  padding: 10px 12px;
   display: flex;
-  justify-content: stretch;
+  align-items: center;
 }
 
-.submit-bar .primary {
+.submit-panel-min .primary {
   width: 100%;
 }
 
