@@ -1955,7 +1955,10 @@ async function uploadPdf() {
   state.highlightSelection.argument.clear();
   state.conceptTypePath = [];
 
-  el("paperInfo").textContent = `Saved as dataset/papers/${state.paperId}.{pdf,tei.xml,md,json}`;
+  const info = el("paperInfo");
+  if (info) {
+    info.textContent = `Saved as dataset/papers/${state.paperId}.{pdf,tei.xml,md,json}`;
+  }
 
   renderMetadata();
   renderDoc();
@@ -2088,7 +2091,10 @@ function init() {
   wireLibraryControls();
   wireSelectionMenu();
 
-  el("paperInfo").textContent = "Files will save under dataset/papers/";
+  const info = el("paperInfo");
+  if (info) {
+    info.textContent = "Files will save under dataset/papers/";
+  }
 
   el("uploadBtn").addEventListener("click", uploadPdf);
   el("docView").addEventListener("mouseup", handleDocSelection);

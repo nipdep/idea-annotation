@@ -261,6 +261,16 @@ details summary::marker {
   flex-wrap: wrap;
 }
 
+.upload-inline input[type="file"] {
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.upload-inline button {
+  flex-shrink: 0;
+}
+
 button {
   border: none;
   background: var(--accent);
