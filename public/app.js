@@ -223,6 +223,7 @@ function commitPendingHighlight(target) {
       updateDescription("argument");
       requestNormalization(pending.text);
     } else {
+      state.highlightSelection.concept.clear();
       state.highlightSelection.concept.add(id);
       const labelInput = el("conceptLabel");
       if (labelInput && !labelInput.value.trim()) {
@@ -1681,10 +1682,19 @@ function renderHighlightPickers() {
         if (state.highlightSelection[key].has(hl.id)) {
           state.highlightSelection[key].delete(hl.id);
           row.classList.remove("selected");
-        } else {
-          state.highlightSelection[key].add(hl.id);
-          row.classList.add("selected");
+          updateDescription(key);
+          return;
         }
+
+        if (key === "concept") {
+          state.highlightSelection.concept.clear();
+          container.querySelectorAll(".highlight-pill.selected").forEach((pill) => {
+            pill.classList.remove("selected");
+          });
+        }
+
+        state.highlightSelection[key].add(hl.id);
+        row.classList.add("selected");
         updateDescription(key);
       });
 
@@ -1847,11 +1857,16 @@ function createConcept() {
   }
   const type = typePath.join(" > ");
 
-  const sourceRefs = Array.from(state.highlightSelection.concept).map((id) => {
-    const hl = state.highlights.find((h) => h.id === id);
-    if (!hl) return null;
-    return { section: hl.section, page: hl.page || null };
-  }).filter(Boolean);
+  const selectedConceptId = Array.from(state.highlightSelection.concept)[0];
+  const sourceRefs = selectedConceptId
+    ? [selectedConceptId]
+        .map((id) => {
+          const hl = state.highlights.find((h) => h.id === id);
+          if (!hl) return null;
+          return { section: hl.section, page: hl.page || null };
+        })
+        .filter(Boolean)
+    : [];
 
   const concept = {
     concept_id: uniqueId("C", state.annotations.concepts),
@@ -1862,7 +1877,9 @@ function createConcept() {
   };
 
   state.annotations.concepts.push(concept);
-  consumeHighlights(Array.from(state.highlightSelection.concept));
+  if (selectedConceptId) {
+    consumeHighlights([selectedConceptId]);
+  }
   el("conceptLabel").value = "";
   el("conceptAliases").value = "";
   state.conceptTypePath = [];
