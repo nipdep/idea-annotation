@@ -514,13 +514,17 @@ textarea[readonly] {
 }
 
 .submit-panel-min {
-  padding: 10px 12px;
+  padding: 0;
+  border: none;
+  box-shadow: none;
+  background: transparent;
   display: flex;
-  align-items: center;
+  align-items: stretch;
 }
 
 .submit-panel-min .primary {
   width: 100%;
+  height: 48px;
 }
 
 #annotatePanel .tab-content.active .stack {
