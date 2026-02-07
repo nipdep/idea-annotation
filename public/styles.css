@@ -738,11 +738,11 @@ mark.used {
 }
 
 .highlight-pill {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-rows: auto auto;
-  gap: 8px;
-  padding: 12px 12px 12px 14px;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
   border-radius: 12px;
   background: #f4efe8;
   border: 1px solid var(--border);
@@ -758,8 +758,6 @@ mark.used {
   white-space: normal;
   word-break: break-word;
   flex: 1;
-  grid-column: 1 / -1;
-  grid-row: 2;
 }
 
 .highlight-pill.selected {
@@ -768,18 +766,17 @@ mark.used {
 }
 
 .highlight-pill-close {
-  grid-column: 2;
-  grid-row: 1;
-  justify-self: end;
-  align-self: start;
-  width: 18px;
-  height: 18px;
-  border-radius: 6px;
-  border: 1px solid rgba(106, 92, 79, 0.35);
-  background: transparent;
-  color: #6a5c4f;
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 2px solid #ffffff;
+  background: #d65a43;
+  color: #ffffff;
   cursor: pointer;
-  position: relative;
+  box-shadow: 0 4px 10px rgba(30, 27, 22, 0.2);
 }
 
 .highlight-pill-close::before,
@@ -789,7 +786,7 @@ mark.used {
   top: 50%;
   left: 50%;
   width: 10px;
-  height: 1.5px;
+  height: 1.6px;
   background: currentColor;
   transform-origin: center;
 }
@@ -803,12 +800,7 @@ mark.used {
 }
 
 .highlight-pill-close:hover {
-  border-color: rgba(106, 92, 79, 0.6);
-}
-
-.highlight-pill.selected .highlight-pill-close {
-  color: #2f5f41;
-  border-color: rgba(47, 95, 65, 0.5);
+  background: #c6503a;
 }
 
 .ref-pill {
