@@ -312,7 +312,7 @@ button:hover {
 .collapse-handle {
   position: absolute;
   top: 50%;
-  right: -10px;
+  right: -6px;
   transform: translateY(-50%);
   width: 20px;
   height: 48px;
@@ -326,6 +326,7 @@ button:hover {
   padding: 0;
   cursor: pointer;
   box-shadow: var(--shadow);
+  transition: none;
 }
 
 .collapse-handle::before {
@@ -335,11 +336,16 @@ button:hover {
 }
 
 #annotatorPage.left-collapsed .collapse-handle {
-  right: 4px;
+  right: 2px;
 }
 
 #annotatorPage.left-collapsed .collapse-handle::before {
   content: ">";
+}
+
+.collapse-handle:hover {
+  transform: translateY(-50%);
+  box-shadow: var(--shadow);
 }
 
 button.ghost {
