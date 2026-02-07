@@ -10,8 +10,8 @@
 }
 
 @font-face {
-  font-family: "Eternal Bloom";
-  src: url("assets/Eternal Bloom.otf") format("opentype");
+  font-family: "Callmira-Regular";
+  src: url("assets/Callmira-Regular.otf") format("opentype");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -72,7 +72,7 @@ body {
   font-size: 28px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  font-family: "Eternal Bloom", "Palatino Linotype", "Book Antiqua", Palatino, "Georgia", serif;
+  font-family: "Callmira-Regular", "Palatino Linotype", "Book Antiqua", Palatino, "Georgia", serif;
 }
 
 .app-subtitle {
