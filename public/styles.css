@@ -477,7 +477,6 @@ textarea[readonly] {
 
 #flowPanel {
   padding-bottom: 12px;
-  overflow: hidden;
 }
 
 #annotatePanel {
@@ -874,6 +873,7 @@ mark.used {
   padding-right: 4px;
   flex: 1;
   min-height: 0;
+  padding-top: 12px;
 }
 
 .tag {
@@ -1007,9 +1007,11 @@ mark.used {
 .flow-list {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   margin-top: 4px;
+  overflow-x: auto;
+  padding-bottom: 6px;
 }
 
 .flow-item {
