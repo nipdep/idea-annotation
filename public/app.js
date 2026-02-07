@@ -104,6 +104,45 @@ function showToast(message, type = "info", options = {}) {
   return toast;
 }
 
+function showChecklistToast(requiredTypes, presentTypes, options = {}) {
+  const container = el("toastContainer");
+  if (!container) return null;
+  const toast = document.createElement("div");
+  toast.className = "toast checklist";
+
+  const title = document.createElement("div");
+  title.className = "toast-title";
+  title.textContent = "Missing required argument types";
+  toast.appendChild(title);
+
+  const list = document.createElement("div");
+  list.className = "toast-checklist";
+  const present = new Set(presentTypes || []);
+  requiredTypes.forEach((type) => {
+    const item = document.createElement("div");
+    const done = present.has(type);
+    item.className = `toast-checklist-item ${done ? "done" : "missing"}`;
+
+    const icon = document.createElement("span");
+    icon.className = "toast-checklist-icon";
+    icon.textContent = done ? "✓" : "✕";
+
+    const label = document.createElement("span");
+    label.textContent = formatTypeLabel(type);
+
+    item.appendChild(icon);
+    item.appendChild(label);
+    list.appendChild(item);
+  });
+
+  toast.appendChild(list);
+  container.appendChild(toast);
+
+  const duration = options.duration || 8000;
+  setTimeout(() => toast.remove(), duration);
+  return toast;
+}
+
 function updateDescription(kind) {
   if (kind !== "argument") return;
   const ids = Array.from(state.highlightSelection[kind]);
@@ -1983,13 +2022,7 @@ async function submitAnnotations() {
   const missing = validateRequiredArguments();
   if (missing.length) {
     const present = requiredArgumentTypes.filter((type) => !missing.includes(type));
-    showToast(
-      `Required: ${requiredArgumentTypes.map(formatTypeLabel).join(", ")}. ` +
-      `Annotated: ${present.length ? present.map(formatTypeLabel).join(", ") : "None"}. ` +
-      `Missing: ${missing.map(formatTypeLabel).join(", ")}.`,
-      "error",
-      { duration: 4000 }
-    );
+    showChecklistToast(requiredArgumentTypes, present, { duration: 9000 });
     return;
   }
 

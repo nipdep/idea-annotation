@@ -1139,6 +1139,47 @@ mark.used {
   border-left-color: #2a6f6e;
 }
 
+.toast.checklist {
+  border-left-color: #c25733;
+}
+
+.toast-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.toast-checklist {
+  display: grid;
+  gap: 4px;
+}
+
+.toast-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.toast-checklist-item.done {
+  color: #2f5f41;
+}
+
+.toast-checklist-item.missing {
+  color: #8a3f2b;
+}
+
+.toast-checklist-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+}
+
 .spinner {
   width: 14px;
   height: 14px;
