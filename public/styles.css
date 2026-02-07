@@ -477,6 +477,7 @@ textarea[readonly] {
 
 #flowPanel {
   padding-bottom: 12px;
+  overflow: hidden;
 }
 
 #annotatePanel {
@@ -1016,12 +1017,13 @@ mark.used {
   align-items: center;
   gap: 8px;
   font-size: 0.85rem;
-  padding: 6px 10px;
+  padding: 6px 8px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: #f4efe8;
   color: var(--ink);
   white-space: nowrap;
+  max-width: 100%;
 }
 
 .flow-item.done {
@@ -1040,7 +1042,7 @@ mark.used {
   content: "→";
   color: #9c8d81;
   font-size: 0.9rem;
-  margin-left: 8px;
+  margin-left: 6px;
 }
 
 .flow-item:last-child::after {
