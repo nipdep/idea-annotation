@@ -73,16 +73,16 @@ body {
 
 .header-tabs {
   display: flex;
-  gap: 8px;
+  gap: 4px;
 }
 
 .nav-tab {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--ink);
-  padding: 12px 22px;
+  padding: 12px 18px;
   font-size: 1rem;
-  border-radius: 999px;
+  border-radius: 10px;
 }
 
 .nav-tab.active {
