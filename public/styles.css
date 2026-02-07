@@ -485,7 +485,7 @@ textarea[readonly] {
 
 .right-stack {
   display: grid;
-  grid-template-rows: 1fr 90px;
+  grid-template-rows: 1fr min-content;
   gap: 8px;
   height: calc(100vh - 120px);
   min-height: 0;
