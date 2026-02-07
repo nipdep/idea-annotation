@@ -105,6 +105,7 @@ body {
 
 .guidelines {
   padding: 12px 32px 32px;
+  min-height: calc(100vh - 120px);
 }
 
 .app-footer {
@@ -116,6 +117,7 @@ body {
 
 .library {
   padding: 12px 32px 32px;
+  min-height: calc(100vh - 120px);
 }
 
 .library-controls {
@@ -153,11 +155,14 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr);
   gap: 18px;
+  height: calc(100vh - 200px);
+  align-items: stretch;
+  min-height: 0;
 }
 
 .library-view {
   display: none;
-  max-height: 70vh;
+  max-height: none;
   overflow: auto;
 }
 
@@ -190,6 +195,20 @@ body {
 .graph-container {
   width: 100%;
   min-height: 420px;
+}
+
+.library-grid .panel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+#libraryDetail {
+  height: 100%;
+}
+
+.guidelines .panel {
+  min-height: calc(100vh - 180px);
 }
 
 .graph-node {
