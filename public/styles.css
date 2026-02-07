@@ -467,6 +467,8 @@ textarea[readonly] {
 
 #annotatePanel {
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 #annotatePanel .tab-content.active {
@@ -474,6 +476,7 @@ textarea[readonly] {
   flex-direction: column;
   gap: 12px;
   min-height: 0;
+  flex: 1;
 }
 
 #annotatePanel .tab-content.active .stack {
@@ -483,6 +486,10 @@ textarea[readonly] {
 #annotatePanel .tab-content.active .source-refs {
   flex: 1 1 auto;
   min-height: 0;
+}
+
+#annotatePanel .tab-content.active button {
+  margin-top: auto;
 }
 
 #submitPanel {
