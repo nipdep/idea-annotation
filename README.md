@@ -83,3 +83,14 @@ dataset/
 - Highlights must stay within a single paragraph (simplifies DOM range handling).
 - Crossref enrichment is best-effort; the app will continue if it fails.
 - `page` is manually entered per highlight.
+
+## Bug report 
+- when concept highlight section changes even though the element in source ref changes, "label" section say the same as previous. 
+- Some paper annotation submission are not saving properly
+
+## Proposed features
+- Add running example 
+- from annotated section, when user click the element it'll automatically populate the annotation fields 
+- 
+- Defined (structure) what each argument type means and who those fit together to avoid ambiguity in annotation
+- add speech act into the canonicalized text 

@@ -266,7 +266,7 @@ function commitPendingHighlight(target) {
       state.highlightSelection.concept.clear();
       state.highlightSelection.concept.add(id);
       const labelInput = el("conceptLabel");
-      if (labelInput && !labelInput.value.trim()) {
+      if (labelInput) {
         labelInput.value = pending.text;
       }
     }
@@ -1709,6 +1709,10 @@ function renderHighlightPickers() {
           const existingConceptIds = Array.from(state.highlightSelection.concept);
           existingConceptIds.forEach((existingId) => removeHighlight(existingId));
           state.highlightSelection.concept.clear();
+          const labelInput = el("conceptLabel");
+          if (labelInput) {
+            labelInput.value = hl.text;
+          }
         }
 
         state.highlightSelection[key].add(hl.id);
