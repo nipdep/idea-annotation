@@ -49,6 +49,10 @@ const state = {
   pendingSelection: null,
   argumentDescription: "",
   docMode: "text",
+  editing: {
+    conceptId: null,
+    argumentId: null,
+  },
   highlightSelection: {
     concept: new Set(),
     argument: new Set(),
@@ -389,6 +393,106 @@ function renderConceptTypePath() {
 
 function normalizeArgType(value) {
   return String(value || "").toLowerCase();
+}
+
+function activateAnnotationTab(tabName) {
+  document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+  document.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
+  const tab = document.querySelector(`.tab[data-tab="${tabName}"]`);
+  const content = el(`${tabName}Tab`);
+  if (tab) tab.classList.add("active");
+  if (content) content.classList.add("active");
+}
+
+function setConceptButtonMode() {
+  const btn = el("addConceptBtn");
+  if (!btn) return;
+  btn.textContent = state.editing.conceptId ? "Save Concept" : "Add Concept";
+}
+
+function setArgumentButtonMode() {
+  const btn = el("addArgumentBtn");
+  if (!btn) return;
+  btn.textContent = state.editing.argumentId ? "Save Argument" : "Add Argument";
+}
+
+function resetConceptEditor() {
+  state.editing.conceptId = null;
+  el("conceptLabel").value = "";
+  el("conceptAliases").value = "";
+  state.conceptTypePath = [];
+  state.highlightSelection.concept.clear();
+  renderConceptTypePicker();
+  renderConceptTypePath();
+  renderHighlightPickers();
+  setConceptButtonMode();
+  renderConceptList();
+}
+
+function resetArgumentEditor() {
+  state.editing.argumentId = null;
+  el("argumentText").value = "";
+  el("argumentType").value = argumentTypes[0];
+  state.argumentDescription = "";
+  state.highlightSelection.argument.clear();
+  updateDescription("argument");
+  el("argumentConceptRefs")
+    .querySelectorAll(".ref-pill")
+    .forEach((pill) => pill.classList.remove("selected"));
+  renderHighlightPickers();
+  setArgumentButtonMode();
+  renderArgumentList();
+}
+
+function startConceptEdit(conceptId) {
+  const concept = state.annotations.concepts.find((c) => c.concept_id === conceptId);
+  if (!concept) return;
+  if (state.editing.conceptId === conceptId) {
+    resetConceptEditor();
+    return;
+  }
+  state.editing.conceptId = conceptId;
+  activateAnnotationTab("concept");
+  el("conceptLabel").value = concept.label || "";
+  el("conceptAliases").value = (concept.aliases || []).join(", ");
+  state.conceptTypePath = String(concept.type || "")
+    .split(" > ")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  state.highlightSelection.concept.clear();
+  renderConceptTypePicker();
+  renderConceptTypePath();
+  renderHighlightPickers();
+  setConceptButtonMode();
+  renderConceptList();
+}
+
+function startArgumentEdit(argumentId) {
+  const argument = state.annotations.arguments.find((a) => a.argument_id === argumentId);
+  if (!argument) return;
+  if (state.editing.argumentId === argumentId) {
+    resetArgumentEditor();
+    return;
+  }
+  state.editing.argumentId = argumentId;
+  activateAnnotationTab("argument");
+  el("argumentText").value = argument.text || "";
+  el("argumentType").value = argument.arg_type || argumentTypes[0];
+  state.argumentDescription = argument.description || "";
+  state.highlightSelection.argument.clear();
+  updateDescription("argument");
+  renderArgumentConceptRefs();
+  const selected = new Set(argument.concept_refs || []);
+  el("argumentConceptRefs")
+    .querySelectorAll(".ref-pill")
+    .forEach((pill) => {
+      const isSelected = selected.has(pill.dataset.conceptId);
+      pill.classList.toggle("selected", isSelected);
+      pill.dataset.selected = isSelected ? "true" : "false";
+    });
+  renderHighlightPickers();
+  setArgumentButtonMode();
+  renderArgumentList();
 }
 
 function flattenAuthors(authors) {
@@ -1761,6 +1865,9 @@ function renderConceptList() {
   state.annotations.concepts.forEach((concept) => {
     const item = document.createElement("div");
     item.className = "list-item";
+    if (state.editing.conceptId === concept.concept_id) {
+      item.classList.add("active-edit");
+    }
 
     const info = document.createElement("div");
     const roles = (concept.roles || []).join(", ");
@@ -1770,12 +1877,17 @@ function renderConceptList() {
       <div class="meta">${concept.type || "Uncategorized"}${roles ? ` • ${roles}` : ""}</div>
       <div class="meta">Source refs: ${sourceCount}</div>
     `;
+    info.addEventListener("click", () => startConceptEdit(concept.concept_id));
 
     const remove = document.createElement("button");
     remove.className = "ghost";
     remove.textContent = "Delete";
     remove.addEventListener("click", () => {
       state.annotations.concepts = state.annotations.concepts.filter((c) => c.concept_id !== concept.concept_id);
+      if (state.editing.conceptId === concept.concept_id) {
+        state.editing.conceptId = null;
+        setConceptButtonMode();
+      }
       renderConceptList();
       renderArgumentConceptRefs();
     });
@@ -1797,6 +1909,9 @@ function renderArgumentList() {
   state.annotations.arguments.forEach((argument) => {
     const item = document.createElement("div");
     item.className = "list-item";
+    if (state.editing.argumentId === argument.argument_id) {
+      item.classList.add("active-edit");
+    }
 
     const info = document.createElement("div");
     const preview = argument.text ? `${argument.text.slice(0, 80)}${argument.text.length > 80 ? "..." : ""}` : "";
@@ -1806,12 +1921,17 @@ function renderArgumentList() {
       <div class="meta">${preview}</div>
       <div class="meta">Concept refs: ${conceptCount}</div>
     `;
+    info.addEventListener("click", () => startArgumentEdit(argument.argument_id));
 
     const remove = document.createElement("button");
     remove.className = "ghost";
     remove.textContent = "Delete";
     remove.addEventListener("click", () => {
       state.annotations.arguments = state.annotations.arguments.filter((a) => a.argument_id !== argument.argument_id);
+      if (state.editing.argumentId === argument.argument_id) {
+        state.editing.argumentId = null;
+        setArgumentButtonMode();
+      }
       renderArgumentList();
     });
 
@@ -1889,29 +2009,34 @@ function createConcept() {
         .filter(Boolean)
     : [];
 
+  const editingId = state.editing.conceptId;
+  const existingConcept = editingId
+    ? state.annotations.concepts.find((c) => c.concept_id === editingId)
+    : null;
   const concept = {
-    concept_id: uniqueId("C", state.annotations.concepts),
+    concept_id: editingId || uniqueId("C", state.annotations.concepts),
     label,
     aliases: aliases.length ? aliases : undefined,
     type,
-    source_refs: sourceRefs.length ? sourceRefs : undefined,
+    source_refs: sourceRefs.length ? sourceRefs : existingConcept?.source_refs,
   };
 
-  state.annotations.concepts.push(concept);
+  if (editingId) {
+    const index = state.annotations.concepts.findIndex((c) => c.concept_id === editingId);
+    if (index >= 0) state.annotations.concepts[index] = concept;
+  } else {
+    state.annotations.concepts.push(concept);
+  }
   if (selectedConceptId) {
     consumeHighlights([selectedConceptId]);
   }
-  el("conceptLabel").value = "";
-  el("conceptAliases").value = "";
-  state.conceptTypePath = [];
-  renderConceptTypePicker();
-  renderConceptTypePath();
-  document.querySelectorAll(".roles input").forEach((input) => (input.checked = false));
-  state.highlightSelection.concept.clear();
-
+  resetConceptEditor();
   renderConceptList();
   renderArgumentConceptRefs();
   renderHighlightPickers();
+  if (editingId) {
+    showToast("Concept updated.", "success");
+  }
 }
 
 function createArgument() {
@@ -1932,26 +2057,32 @@ function createArgument() {
     return { section: hl.section, page: hl.page || null };
   }).filter(Boolean);
 
+  const editingId = state.editing.argumentId;
+  const existingArgument = editingId
+    ? state.annotations.arguments.find((a) => a.argument_id === editingId)
+    : null;
   const argument = {
-    argument_id: uniqueId("A", state.annotations.arguments),
+    argument_id: editingId || uniqueId("A", state.annotations.arguments),
     text,
     arg_type: argType,
-    description: state.argumentDescription.trim() || undefined,
+    description: state.argumentDescription.trim() || existingArgument?.description,
     concept_refs: conceptRefs.length ? conceptRefs : undefined,
-    source_refs: sourceRefs.length ? sourceRefs : undefined,
+    source_refs: sourceRefs.length ? sourceRefs : existingArgument?.source_refs,
   };
 
-  state.annotations.arguments.push(argument);
+  if (editingId) {
+    const index = state.annotations.arguments.findIndex((a) => a.argument_id === editingId);
+    if (index >= 0) state.annotations.arguments[index] = argument;
+  } else {
+    state.annotations.arguments.push(argument);
+  }
   consumeHighlights(Array.from(state.highlightSelection.argument));
-  el("argumentText").value = "";
-  state.argumentDescription = "";
-  state.highlightSelection.argument.clear();
-  el("argumentConceptRefs")
-    .querySelectorAll(".ref-pill")
-    .forEach((pill) => pill.classList.remove("selected"));
-
+  resetArgumentEditor();
   renderArgumentList();
   renderHighlightPickers();
+  if (editingId) {
+    showToast("Argument updated.", "success");
+  }
 }
 
 async function uploadPdf() {
@@ -1986,6 +2117,8 @@ async function uploadPdf() {
   state.highlightSelection.concept.clear();
   state.highlightSelection.argument.clear();
   state.conceptTypePath = [];
+  state.editing.conceptId = null;
+  state.editing.argumentId = null;
 
   const info = el("paperInfo");
   if (info) {
@@ -2000,6 +2133,8 @@ async function uploadPdf() {
   renderArgumentConceptRefs();
   renderConceptTypePicker();
   renderConceptTypePath();
+  setConceptButtonMode();
+  setArgumentButtonMode();
   updateDescription("argument");
   if (loadingToast) loadingToast.remove();
   if (data.existing) {
@@ -2113,6 +2248,8 @@ function init() {
   renderArgumentConceptRefs();
   renderConceptTypePicker();
   renderConceptTypePath();
+  setConceptButtonMode();
+  setArgumentButtonMode();
   updateDescription("argument");
   wireTabs();
   wireNavigation();

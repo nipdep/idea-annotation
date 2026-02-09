@@ -955,11 +955,17 @@ mark.used {
 
 .list-item > div:first-child {
   flex: 1;
+  cursor: pointer;
 }
 
 .list-item .meta {
   font-size: 0.85rem;
   color: var(--muted);
+}
+
+.list-item.active-edit {
+  border-color: rgba(42, 111, 110, 0.45);
+  background: #eef7f6;
 }
 
 .tag-list {
