@@ -29,13 +29,24 @@ function collectText(node) {
   return "";
 }
 
+function collectNameText(node) {
+  if (node == null) return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(collectNameText).join(" ");
+  if (typeof node === "object") {
+    if (node["#text"] != null) return collectText(node["#text"]);
+    if (node.text != null) return collectText(node.text);
+  }
+  return "";
+}
+
 function parseAuthors(authorNode) {
   const authors = [];
   toArray(authorNode).forEach((author) => {
     if (!author) return;
     const pers = author.persName || author;
-    const forenames = toArray(pers.forename).map(collectText).join(" ");
-    const surname = collectText(pers.surname);
+    const forenames = toArray(pers.forename).map(collectNameText).join(" ");
+    const surname = collectNameText(pers.surname);
     const name = cleanText([forenames, surname].filter(Boolean).join(" "));
     if (name) authors.push(name);
   });

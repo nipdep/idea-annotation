@@ -147,11 +147,11 @@ async function fetchCrossref(metadata) {
 function mergeMetadata(base, extra) {
   if (!extra) return base;
   return {
-    title: base.title || extra.title || "",
-    doi: base.doi || extra.doi || "",
-    year: base.year || extra.year || "",
-    venue: base.venue || extra.venue || "",
-    authors: base.authors?.length ? base.authors : extra.authors || [],
+    title: extra.title || base.title || "",
+    doi: extra.doi || base.doi || "",
+    year: extra.year || base.year || "",
+    venue: extra.venue || base.venue || "",
+    authors: extra.authors?.length ? extra.authors : base.authors || [],
   };
 }
 
@@ -290,12 +290,23 @@ app.post("/api/normalize", async (req, res) => {
     }
 
     const instruction = `
-Strip to the semantic core. Apply three deterministic rules:
-1) Remove epistemic modifiers (e.g., significantly, suggests that, to the best of our knowledge).
-2) Collapse enumerations when possible, or produce one canonical assertion per comparison dimension.
-3) Make implicit subjects explicit.
-Then enforce canonical form: a competent reader should judge support/contradiction using the paper alone.
-Return only the canonical sentence.`;
+You are normalizing a highlighted span from a scientific paper into one standalone canonical statement.
+
+Goal:
+- Produce exactly one precise statement.
+- Keep only the most impactful claim if multiple independent claims are present.
+- If multiple clauses are complementary and complete each other, abstract them into one coherent statement.
+
+Rules:
+1) Remove epistemic/rhetorical modifiers (e.g., "significantly", "we believe", "suggests that", "to the best of our knowledge") unless removing changes polarity.
+2) Resolve implicit subjects/referents to explicit ones when possible.
+3) Prefer factual proposition over examples, parenthetical detail, and citation framing.
+4) Keep the statement verifiable from the paper content alone.
+5) Do not invent entities, relations, or conclusions not present in the input.
+
+Output constraints:
+- Return only one sentence.
+- No bullet points, no explanation, no prefixes.`;
 
     const payload =
       LLM_MODE === "prompt"
