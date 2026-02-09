@@ -49,6 +49,7 @@ const state = {
   pendingSelection: null,
   argumentDescription: "",
   docMode: "text",
+  virtualHighlightSeq: 0,
   editing: {
     conceptId: null,
     argumentId: null,
@@ -151,11 +152,60 @@ function updateDescription(kind) {
   if (kind !== "argument") return;
   const ids = Array.from(state.highlightSelection[kind]);
   const texts = state.highlights
-    .filter((hl) => ids.includes(hl.id))
+    .filter((hl) => ids.includes(hl.id) && !hl.virtual)
     .map((hl) => hl.text);
   state.argumentDescription = texts.join("\n\n");
   const textarea = el("argumentDescription");
   if (textarea) textarea.value = state.argumentDescription;
+}
+
+function clearVirtualHighlights(target) {
+  state.highlights = state.highlights.filter((hl) => {
+    const remove = hl.virtual && (!target || hl.target === target);
+    if (!remove) return true;
+    state.highlightSelection.concept.delete(hl.id);
+    state.highlightSelection.argument.delete(hl.id);
+    return false;
+  });
+}
+
+function hydrateSourceRefsForEdit(target, sourceRefs, single = false) {
+  clearVirtualHighlights(target);
+  if (target === "concept") {
+    state.highlightSelection.concept.clear();
+  } else {
+    state.highlightSelection.argument.clear();
+    updateDescription("argument");
+  }
+  if (!Array.isArray(sourceRefs) || sourceRefs.length === 0) return;
+  const created = [];
+
+  sourceRefs.forEach((ref, idx) => {
+    if (!ref) return;
+    if (single && idx > 0) return;
+    const section = ref.section || "Body";
+    const page = ref.page == null ? "" : String(ref.page);
+    const text = page ? `${section} (p.${page})` : section;
+    const id = `V${++state.virtualHighlightSeq}`;
+
+    state.highlights.push({
+      id,
+      text,
+      section,
+      page,
+      used: false,
+      target,
+      virtual: true,
+    });
+    created.push(id);
+  });
+
+  if (target === "concept") {
+    if (created[0]) state.highlightSelection.concept.add(created[0]);
+  } else {
+    created.forEach((id) => state.highlightSelection.argument.add(id));
+    updateDescription("argument");
+  }
 }
 
 function getSelectionContext(range) {
@@ -418,6 +468,7 @@ function setArgumentButtonMode() {
 
 function resetConceptEditor() {
   state.editing.conceptId = null;
+  clearVirtualHighlights("concept");
   el("conceptLabel").value = "";
   el("conceptAliases").value = "";
   state.conceptTypePath = [];
@@ -431,6 +482,7 @@ function resetConceptEditor() {
 
 function resetArgumentEditor() {
   state.editing.argumentId = null;
+  clearVirtualHighlights("argument");
   el("argumentText").value = "";
   el("argumentType").value = argumentTypes[0];
   state.argumentDescription = "";
@@ -459,7 +511,7 @@ function startConceptEdit(conceptId) {
     .split(" > ")
     .map((part) => part.trim())
     .filter(Boolean);
-  state.highlightSelection.concept.clear();
+  hydrateSourceRefsForEdit("concept", concept.source_refs, true);
   renderConceptTypePicker();
   renderConceptTypePath();
   renderHighlightPickers();
@@ -479,7 +531,7 @@ function startArgumentEdit(argumentId) {
   el("argumentText").value = argument.text || "";
   el("argumentType").value = argument.arg_type || argumentTypes[0];
   state.argumentDescription = argument.description || "";
-  state.highlightSelection.argument.clear();
+  hydrateSourceRefsForEdit("argument", argument.source_refs, false);
   updateDescription("argument");
   renderArgumentConceptRefs();
   const selected = new Set(argument.concept_refs || []);
@@ -2113,6 +2165,7 @@ async function uploadPdf() {
   state.annotations = data.annotation || { concepts: [], arguments: [], created_at: null };
   state.metadataChecks = data.annotation?.metadata_checks || {};
   state.highlights = [];
+  state.virtualHighlightSeq = 0;
   state.argumentDescription = "";
   state.highlightSelection.concept.clear();
   state.highlightSelection.argument.clear();
