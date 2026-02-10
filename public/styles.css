@@ -963,6 +963,27 @@ mark.used {
   color: var(--muted);
 }
 
+.concept-ref-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.concept-ref-link {
+  border: 1px solid var(--border);
+  background: #f4efe8;
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.concept-ref-link:hover {
+  background: #e9f1f0;
+  border-color: rgba(42, 111, 110, 0.35);
+}
+
 .list-item.active-edit {
   border-color: rgba(42, 111, 110, 0.45);
   background: #eef7f6;

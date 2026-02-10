@@ -1164,16 +1164,11 @@ function renderLibraryDetail() {
     if (inst.kind === "argument") {
       const arg = (selected.arguments || []).find((a) => a.argument_id === inst.id);
       if (arg) {
+        const conceptRefs = Array.isArray(arg.concept_refs) ? arg.concept_refs : [];
         const fields = [
           { label: "Class", value: formatTypeLabel(arg.arg_type || "") },
           { label: "Label", value: arg.text || "-" },
           { label: "Description", value: arg.description || "-" },
-          {
-            label: "Concept refs",
-            value: Array.isArray(arg.concept_refs) && arg.concept_refs.length
-              ? arg.concept_refs.join(", ")
-              : "",
-          },
           {
             label: "Source refs",
             value: Array.isArray(arg.source_refs) && arg.source_refs.length
@@ -1196,6 +1191,33 @@ function renderLibraryDetail() {
           info.appendChild(label);
           info.appendChild(value);
         });
+
+        if (conceptRefs.length) {
+          const refsLabel = document.createElement("div");
+          refsLabel.innerHTML = "<strong>Concept refs</strong>";
+          info.appendChild(refsLabel);
+
+          const refsWrap = document.createElement("div");
+          refsWrap.className = "meta concept-ref-links";
+
+          conceptRefs.forEach((conceptId) => {
+            const concept = (selected.concepts || []).find((c) => c.concept_id === conceptId);
+            const refBtn = document.createElement("button");
+            refBtn.type = "button";
+            refBtn.className = "concept-ref-link";
+            refBtn.textContent = concept?.label
+              ? `${conceptId} ${concept.label}`
+              : conceptId;
+            refBtn.addEventListener("click", () => {
+              state.library.selectedInstance = { kind: "concept", id: conceptId };
+              renderLibraryDetail();
+              renderLibraryGraph();
+            });
+            refsWrap.appendChild(refBtn);
+          });
+
+          info.appendChild(refsWrap);
+        }
 
         const updated = document.createElement("details");
         updated.innerHTML = `
