@@ -208,6 +208,43 @@ function hydrateSourceRefsForEdit(target, sourceRefs, single = false) {
   }
 }
 
+function hydrateArgumentRefsFromDescription(description, sourceRefs) {
+  clearVirtualHighlights("argument");
+  state.highlightSelection.argument.clear();
+  updateDescription("argument");
+
+  const refs = Array.isArray(sourceRefs) ? sourceRefs : [];
+  const chunks = String(description || "")
+    .split(/\n{2,}/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const total = Math.max(chunks.length, refs.length);
+  if (!total) return;
+
+  const created = [];
+  for (let i = 0; i < total; i += 1) {
+    const ref = refs[i] || {};
+    const section = ref.section || "Body";
+    const page = ref.page == null ? "" : String(ref.page);
+    const fallbackText = page ? `${section} (p.${page})` : section;
+    const text = chunks[i] || fallbackText;
+    const id = `V${++state.virtualHighlightSeq}`;
+
+    state.highlights.push({
+      id,
+      text,
+      section,
+      page,
+      used: false,
+      target: "argument",
+      virtual: true,
+    });
+    created.push(id);
+  }
+
+  created.forEach((id) => state.highlightSelection.argument.add(id));
+}
+
 function getSelectionContext(range) {
   const element = range.commonAncestorContainer.nodeType === 1
     ? range.commonAncestorContainer
@@ -531,8 +568,7 @@ function startArgumentEdit(argumentId) {
   el("argumentText").value = argument.text || "";
   el("argumentType").value = argument.arg_type || argumentTypes[0];
   state.argumentDescription = argument.description || "";
-  hydrateSourceRefsForEdit("argument", argument.source_refs, false);
-  updateDescription("argument");
+  hydrateArgumentRefsFromDescription(argument.description, argument.source_refs);
   renderArgumentConceptRefs();
   const selected = new Set(argument.concept_refs || []);
   el("argumentConceptRefs")
