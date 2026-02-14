@@ -46,13 +46,18 @@
           <div id="metadataForm" class="stack"></div>
 
           <div class="list-block">
-            <div class="subhead">Concepts</div>
+            <div class="subhead">Artifacts</div>
             <div id="conceptList" class="list"></div>
           </div>
 
           <div class="list-block">
             <div class="subhead">Arguments</div>
             <div id="argumentList" class="list"></div>
+          </div>
+
+          <div class="list-block">
+            <div class="subhead">Descriptors</div>
+            <div id="descriptorList" class="list"></div>
           </div>
         </section>
 
@@ -85,6 +90,7 @@
           <div class="tab-bar">
             <button class="tab active" data-tab="concept">Artifact</button>
             <button class="tab" data-tab="argument">Argument</button>
+            <button class="tab" data-tab="descriptor">Descriptor</button>
           </div>
 
           <div id="conceptTab" class="tab-content active">
@@ -110,7 +116,7 @@
               <label>Type <span class="required">*</span>
                 <select id="argumentType"></select>
               </label>
-              <label>Concept refs
+              <label>Artifact refs
                 <div id="argumentConceptRefs" class="tag-list"></div>
               </label>
             </div>
@@ -119,6 +125,22 @@
               <div id="highlightPickerArgument"></div>
             </div>
             <button id="addArgumentBtn">Add Argument</button>
+          </div>
+
+          <div id="descriptorTab" class="tab-content">
+            <div class="stack">
+              <label>Type <span class="required">*</span>
+                <select id="descriptorType"></select>
+              </label>
+              <label>Artifact refs
+                <div id="descriptorConceptRefs" class="tag-list"></div>
+              </label>
+            </div>
+            <div class="stack source-refs">
+              <div class="subhead">Source refs</div>
+              <div id="highlightPickerDescriptor"></div>
+            </div>
+            <button id="addDescriptorBtn">Add Descriptor</button>
           </div>
         </section>
 
@@ -140,19 +162,25 @@
           <div class="stack">
             <div>
               <div class="subhead">Core Objects</div>
-              <p>Annotate only two objects: Concepts (entities) and Arguments (canonical statements). No relations or extra structure.</p>
+              <p>Annotate three objects: Artifacts (entities), Arguments (canonical statements), and Descriptors.</p>
             </div>
 
             <div>
-              <div class="subhead">Concepts</div>
+              <div class="subhead">Artifacts</div>
               <p>Choose the most specific category available. You can stop at any level if no finer match exists.</p>
-              <p>Required fields: label, category, roles.</p>
+              <p>Required fields: label and category.</p>
             </div>
 
             <div>
               <div class="subhead">Arguments</div>
-              <p>Required fields: canonical text and argument type. Concept refs are optional.</p>
+              <p>Required fields: canonical text and argument type. Artifact refs are optional.</p>
               <p>Required types for submission: issue, idea, approach, claim.</p>
+            </div>
+
+            <div>
+              <div class="subhead">Descriptors</div>
+              <p>Required fields: descriptor type and source refs. Artifact refs are optional.</p>
+              <p>Descriptor type values: description, definition, composition, comparison, limitation.</p>
             </div>
 
             <div>
@@ -175,7 +203,7 @@
     <section id="libraryPage" class="page">
       <div class="library">
         <div class="library-controls">
-          <input id="librarySearch" type="text" placeholder="Search papers, concepts, arguments..." />
+          <input id="librarySearch" type="text" placeholder="Search papers, artifacts, arguments, descriptors..." />
           <div class="view-toggle">
             <button class="toggle active" data-view="table">Table View</button>
             <button class="toggle" data-view="graph">Graph View</button>
@@ -191,7 +219,7 @@
                     <th>Title</th>
                     <th>Year</th>
                     <th>Venue</th>
-                    <th>Concepts</th>
+                    <th>Artifacts</th>
                     <th>Arguments</th>
                   </tr>
                 </thead>
@@ -223,6 +251,7 @@
     <div id="selectionMenu" class="selection-menu hidden">
       <button type="button" data-action="concept">Add to Artifact Context</button>
       <button type="button" data-action="argument">Add to Argument Context</button>
+      <button type="button" data-action="descriptor">Add to Descriptor Context</button>
     </div>
 
     <div id="toastContainer" class="toast-container"></div>

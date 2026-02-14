@@ -25,6 +25,14 @@ const argumentTypes = [
   "central argument",
 ];
 
+const descriptorTypes = [
+  "description",
+  "definition",
+  "composition",
+  "comparison",
+  "limitation",
+];
+
 const requiredArgumentTypes = ["issue", "idea", "approach", "claim"];
 
 const state = {
@@ -34,7 +42,7 @@ const state = {
   metadataChecks: {},
   doc: null,
   teiXml: "",
-  annotations: { concepts: [], arguments: [], created_at: null },
+  annotations: { concepts: [], arguments: [], descriptors: [], created_at: null },
   highlights: [],
   pendingSelection: null,
   argumentDescription: "",
@@ -43,10 +51,12 @@ const state = {
   editing: {
     conceptId: null,
     argumentId: null,
+    descriptorId: null,
   },
   highlightSelection: {
     concept: new Set(),
     argument: new Set(),
+    descriptor: new Set(),
   },
   conceptType: "",
   library: {
@@ -155,6 +165,7 @@ function clearVirtualHighlights(target) {
     if (!remove) return true;
     state.highlightSelection.concept.delete(hl.id);
     state.highlightSelection.argument.delete(hl.id);
+    state.highlightSelection.descriptor.delete(hl.id);
     return false;
   });
 }
@@ -163,9 +174,11 @@ function hydrateSourceRefsForEdit(target, sourceRefs, single = false) {
   clearVirtualHighlights(target);
   if (target === "concept") {
     state.highlightSelection.concept.clear();
-  } else {
+  } else if (target === "argument") {
     state.highlightSelection.argument.clear();
     updateDescription("argument");
+  } else {
+    state.highlightSelection.descriptor.clear();
   }
   if (!Array.isArray(sourceRefs) || sourceRefs.length === 0) return;
   const created = [];
@@ -192,9 +205,11 @@ function hydrateSourceRefsForEdit(target, sourceRefs, single = false) {
 
   if (target === "concept") {
     if (created[0]) state.highlightSelection.concept.add(created[0]);
-  } else {
+  } else if (target === "argument") {
     created.forEach((id) => state.highlightSelection.argument.add(id));
     updateDescription("argument");
+  } else {
+    created.forEach((id) => state.highlightSelection.descriptor.add(id));
   }
 }
 
@@ -341,6 +356,8 @@ function commitPendingHighlight(target) {
       state.highlightSelection.argument.add(id);
       updateDescription("argument");
       requestNormalization(pending.text);
+    } else if (target === "descriptor") {
+      state.highlightSelection.descriptor.add(id);
     } else {
       const existingConceptIds = Array.from(state.highlightSelection.concept);
       existingConceptIds.forEach((existingId) => removeHighlight(existingId));
@@ -408,6 +425,17 @@ function normalizeAliases(value) {
     .filter(Boolean);
 }
 
+function normalizeAnnotations(annotation) {
+  const base = annotation || {};
+  return {
+    concepts: Array.isArray(base.concepts) ? base.concepts : [],
+    arguments: Array.isArray(base.arguments) ? base.arguments : [],
+    descriptors: Array.isArray(base.descriptors) ? base.descriptors : [],
+    created_at: base.created_at || null,
+    updated_at: base.updated_at || null,
+  };
+}
+
 function renderArtifactTypeSelect() {
   const select = el("artifactType");
   if (!select) return;
@@ -457,6 +485,12 @@ function setArgumentButtonMode() {
   btn.textContent = state.editing.argumentId ? "Save Argument" : "Add Argument";
 }
 
+function setDescriptorButtonMode() {
+  const btn = el("addDescriptorBtn");
+  if (!btn) return;
+  btn.textContent = state.editing.descriptorId ? "Save Descriptor" : "Add Descriptor";
+}
+
 function resetConceptEditor() {
   state.editing.conceptId = null;
   clearVirtualHighlights("concept");
@@ -486,6 +520,19 @@ function resetArgumentEditor() {
   renderHighlightPickers();
   setArgumentButtonMode();
   renderArgumentList();
+}
+
+function resetDescriptorEditor() {
+  state.editing.descriptorId = null;
+  clearVirtualHighlights("descriptor");
+  el("descriptorType").value = descriptorTypes[0];
+  state.highlightSelection.descriptor.clear();
+  el("descriptorConceptRefs")
+    .querySelectorAll(".ref-pill")
+    .forEach((pill) => pill.classList.remove("selected"));
+  renderHighlightPickers();
+  setDescriptorButtonMode();
+  renderDescriptorList();
 }
 
 function startConceptEdit(conceptId) {
@@ -536,6 +583,31 @@ function startArgumentEdit(argumentId) {
   renderArgumentList();
 }
 
+function startDescriptorEdit(descriptorId) {
+  const descriptor = state.annotations.descriptors.find((d) => d.descriptor_id === descriptorId);
+  if (!descriptor) return;
+  if (state.editing.descriptorId === descriptorId) {
+    resetDescriptorEditor();
+    return;
+  }
+  state.editing.descriptorId = descriptorId;
+  activateAnnotationTab("descriptor");
+  el("descriptorType").value = descriptor.descriptor_type || descriptorTypes[0];
+  hydrateSourceRefsForEdit("descriptor", descriptor.source_refs, false);
+  renderDescriptorConceptRefs();
+  const selected = new Set(descriptor.concept_refs || []);
+  el("descriptorConceptRefs")
+    .querySelectorAll(".ref-pill")
+    .forEach((pill) => {
+      const isSelected = selected.has(pill.dataset.conceptId);
+      pill.classList.toggle("selected", isSelected);
+      pill.dataset.selected = isSelected ? "true" : "false";
+    });
+  renderHighlightPickers();
+  setDescriptorButtonMode();
+  renderDescriptorList();
+}
+
 function flattenAuthors(authors) {
   if (!authors) return "";
   if (Array.isArray(authors)) return authors.join(" ");
@@ -546,6 +618,7 @@ function librarySearchText(item) {
   const metadata = item.metadata || {};
   const conceptLabels = (item.concepts || []).map((c) => c.label || "").join(" ");
   const argumentTexts = (item.arguments || []).map((a) => a.text || "").join(" ");
+  const descriptorTypesText = (item.descriptors || []).map((d) => d.descriptor_type || "").join(" ");
   return [
     metadata.title || "",
     flattenAuthors(metadata.authors),
@@ -554,6 +627,7 @@ function librarySearchText(item) {
     metadata.year || "",
     conceptLabels,
     argumentTexts,
+    descriptorTypesText,
   ]
     .join(" ")
     .toLowerCase();
@@ -1147,7 +1221,7 @@ function renderLibraryDetail() {
 
         if (conceptRefs.length) {
           const refsLabel = document.createElement("div");
-          refsLabel.innerHTML = "<strong>Concept refs</strong>";
+          refsLabel.innerHTML = "<strong>Artifact refs</strong>";
           info.appendChild(refsLabel);
 
           const refsWrap = document.createElement("div");
@@ -1256,7 +1330,7 @@ function renderLibraryDetail() {
 
   const conceptBlock = document.createElement("div");
   conceptBlock.className = "list-block";
-  conceptBlock.innerHTML = `<div class="subhead">Concepts</div>`;
+  conceptBlock.innerHTML = `<div class="subhead">Artifacts</div>`;
   const conceptList = document.createElement("div");
   conceptList.className = "list";
   (selected.concepts || []).forEach((concept) => {
@@ -1271,7 +1345,7 @@ function renderLibraryDetail() {
     conceptList.appendChild(item);
   });
   if (!selected.concepts?.length) {
-    conceptList.innerHTML = '<div class="muted">No concepts recorded.</div>';
+    conceptList.innerHTML = '<div class="muted">No artifacts recorded.</div>';
   }
   conceptBlock.appendChild(conceptList);
   container.appendChild(conceptBlock);
@@ -1297,6 +1371,28 @@ function renderLibraryDetail() {
   }
   argumentBlock.appendChild(argumentList);
   container.appendChild(argumentBlock);
+
+  const descriptorBlock = document.createElement("div");
+  descriptorBlock.className = "list-block";
+  descriptorBlock.innerHTML = `<div class="subhead">Descriptors</div>`;
+  const descriptorList = document.createElement("div");
+  descriptorList.className = "list";
+  (selected.descriptors || []).forEach((descriptor) => {
+    const item = document.createElement("div");
+    item.className = "list-item";
+    item.innerHTML = `
+      <div>
+        <div><strong>${descriptor.descriptor_id}</strong> ${formatTypeLabel(descriptor.descriptor_type || "")}</div>
+        <div class="meta">Artifact refs: ${(descriptor.concept_refs || []).length}</div>
+      </div>
+    `;
+    descriptorList.appendChild(item);
+  });
+  if (!selected.descriptors?.length) {
+    descriptorList.innerHTML = '<div class="muted">No descriptors recorded.</div>';
+  }
+  descriptorBlock.appendChild(descriptorList);
+  container.appendChild(descriptorBlock);
 }
 
 function selectLibraryItem(paperId) {
@@ -1814,6 +1910,7 @@ function renderHighlights() {
       removeHighlight(hl.id);
       state.highlightSelection.concept.delete(hl.id);
       state.highlightSelection.argument.delete(hl.id);
+      state.highlightSelection.descriptor.delete(hl.id);
       renderHighlightPickers();
     });
 
@@ -1829,10 +1926,12 @@ function renderHighlightPickers() {
   const pickers = [
     { id: "highlightPicker", key: "concept" },
     { id: "highlightPickerArgument", key: "argument" },
+    { id: "highlightPickerDescriptor", key: "descriptor" },
   ];
 
   pickers.forEach(({ id, key }) => {
     const container = el(id);
+    if (!container) return;
     container.innerHTML = "";
 
     const available = state.highlights.filter((h) => !h.used && (!h.target || h.target === key));
@@ -1900,6 +1999,7 @@ function removeHighlight(id) {
   state.highlights = state.highlights.filter((h) => h.id !== id);
   state.highlightSelection.concept.delete(id);
   state.highlightSelection.argument.delete(id);
+  state.highlightSelection.descriptor.delete(id);
   updateDescription("argument");
   renderHighlightPickers();
 }
@@ -1911,6 +2011,7 @@ function consumeHighlights(ids) {
     hl.used = true;
     state.highlightSelection.concept.delete(id);
     state.highlightSelection.argument.delete(id);
+    state.highlightSelection.descriptor.delete(id);
     const mark = document.querySelector(`mark[data-hid="${id}"]`);
     if (mark) mark.classList.add("used");
   });
@@ -1921,7 +2022,7 @@ function renderConceptList() {
   const list = el("conceptList");
   list.innerHTML = "";
   if (state.annotations.concepts.length === 0) {
-    list.innerHTML = '<div class="muted">No concepts yet.</div>';
+    list.innerHTML = '<div class="muted">No artifacts yet.</div>';
     return;
   }
 
@@ -1953,6 +2054,7 @@ function renderConceptList() {
       }
       renderConceptList();
       renderArgumentConceptRefs();
+      renderDescriptorConceptRefs();
     });
 
     item.appendChild(info);
@@ -1982,7 +2084,7 @@ function renderArgumentList() {
     info.innerHTML = `
       <div><strong>${argument.argument_id}</strong> ${formatTypeLabel(argument.arg_type || "")}</div>
       <div class="meta">${preview}</div>
-      <div class="meta">Concept refs: ${conceptCount}</div>
+      <div class="meta">Artifact refs: ${conceptCount}</div>
     `;
     info.addEventListener("click", () => startArgumentEdit(argument.argument_id));
 
@@ -2004,12 +2106,85 @@ function renderArgumentList() {
   });
 }
 
+function renderDescriptorList() {
+  const list = el("descriptorList");
+  list.innerHTML = "";
+  if (state.annotations.descriptors.length === 0) {
+    list.innerHTML = '<div class="muted">No descriptors yet.</div>';
+    return;
+  }
+
+  state.annotations.descriptors.forEach((descriptor) => {
+    const item = document.createElement("div");
+    item.className = "list-item";
+    if (state.editing.descriptorId === descriptor.descriptor_id) {
+      item.classList.add("active-edit");
+    }
+
+    const info = document.createElement("div");
+    const artifactCount = descriptor.concept_refs ? descriptor.concept_refs.length : 0;
+    const sourceCount = descriptor.source_refs ? descriptor.source_refs.length : 0;
+    info.innerHTML = `
+      <div><strong>${descriptor.descriptor_id}</strong> ${formatTypeLabel(descriptor.descriptor_type || "")}</div>
+      <div class="meta">Artifact refs: ${artifactCount}</div>
+      <div class="meta">Source refs: ${sourceCount}</div>
+    `;
+    info.addEventListener("click", () => startDescriptorEdit(descriptor.descriptor_id));
+
+    const remove = document.createElement("button");
+    remove.className = "ghost";
+    remove.textContent = "Delete";
+    remove.addEventListener("click", () => {
+      state.annotations.descriptors = state.annotations.descriptors.filter(
+        (d) => d.descriptor_id !== descriptor.descriptor_id
+      );
+      if (state.editing.descriptorId === descriptor.descriptor_id) {
+        state.editing.descriptorId = null;
+        setDescriptorButtonMode();
+      }
+      renderDescriptorList();
+    });
+
+    item.appendChild(info);
+    item.appendChild(remove);
+    list.appendChild(item);
+  });
+}
+
 function renderArgumentConceptRefs() {
   const container = el("argumentConceptRefs");
   container.innerHTML = "";
 
   if (state.annotations.concepts.length === 0) {
-    container.innerHTML = '<div class="muted">Optional. Add concepts first if needed.</div>';
+    container.innerHTML = '<div class="muted">Optional. Add artifacts first if needed.</div>';
+    return;
+  }
+
+  state.annotations.concepts.forEach((concept) => {
+    const label = document.createElement("div");
+    label.className = "ref-pill";
+
+    const text = document.createElement("span");
+    text.textContent = `${concept.concept_id} ${concept.label}`;
+    label.dataset.conceptId = concept.concept_id;
+    label.dataset.selected = "false";
+
+    label.appendChild(text);
+    label.addEventListener("click", () => {
+      label.classList.toggle("selected");
+      label.dataset.selected = label.classList.contains("selected") ? "true" : "false";
+    });
+
+    container.appendChild(label);
+  });
+}
+
+function renderDescriptorConceptRefs() {
+  const container = el("descriptorConceptRefs");
+  container.innerHTML = "";
+
+  if (state.annotations.concepts.length === 0) {
+    container.innerHTML = '<div class="muted">Optional. Add artifacts first if needed.</div>';
     return;
   }
 
@@ -2039,6 +2214,14 @@ function populateSelects() {
     option.value = type;
     option.textContent = formatTypeLabel(type);
     argumentSelect.appendChild(option);
+  });
+
+  const descriptorSelect = el("descriptorType");
+  descriptorTypes.forEach((type) => {
+    const option = document.createElement("option");
+    option.value = type;
+    option.textContent = formatTypeLabel(type);
+    descriptorSelect.appendChild(option);
   });
 }
 
@@ -2096,6 +2279,7 @@ function createConcept() {
   resetConceptEditor();
   renderConceptList();
   renderArgumentConceptRefs();
+  renderDescriptorConceptRefs();
   renderHighlightPickers();
   if (editingId) {
     showToast("Artifact updated.", "success");
@@ -2148,6 +2332,56 @@ function createArgument() {
   }
 }
 
+function createDescriptor() {
+  const descriptorType = el("descriptorType").value;
+  if (!descriptorType) {
+    showToast("Select a descriptor type.", "error");
+    return;
+  }
+
+  const conceptRefs = Array.from(el("descriptorConceptRefs").querySelectorAll(".ref-pill.selected")).map(
+    (pill) => pill.dataset.conceptId
+  );
+
+  const sourceRefs = Array.from(state.highlightSelection.descriptor)
+    .map((id) => {
+      const hl = state.highlights.find((h) => h.id === id);
+      if (!hl) return null;
+      return { section: hl.section, page: hl.page || null };
+    })
+    .filter(Boolean);
+
+  if (!sourceRefs.length) {
+    showToast("Add source refs for the descriptor.", "error");
+    return;
+  }
+
+  const editingId = state.editing.descriptorId;
+  const existingDescriptor = editingId
+    ? state.annotations.descriptors.find((d) => d.descriptor_id === editingId)
+    : null;
+  const descriptor = {
+    descriptor_id: editingId || uniqueId("D", state.annotations.descriptors),
+    descriptor_type: descriptorType,
+    concept_refs: conceptRefs.length ? conceptRefs : undefined,
+    source_refs: sourceRefs.length ? sourceRefs : existingDescriptor?.source_refs,
+  };
+
+  if (editingId) {
+    const index = state.annotations.descriptors.findIndex((d) => d.descriptor_id === editingId);
+    if (index >= 0) state.annotations.descriptors[index] = descriptor;
+  } else {
+    state.annotations.descriptors.push(descriptor);
+  }
+  consumeHighlights(Array.from(state.highlightSelection.descriptor));
+  resetDescriptorEditor();
+  renderDescriptorList();
+  renderHighlightPickers();
+  if (editingId) {
+    showToast("Descriptor updated.", "success");
+  }
+}
+
 async function uploadPdf() {
   const file = el("pdfInput").files[0];
   if (!file) {
@@ -2173,16 +2407,18 @@ async function uploadPdf() {
   state.metadata = data.metadata || {};
   state.doc = data.doc;
   state.teiXml = data.tei_xml || "";
-  state.annotations = data.annotation || { concepts: [], arguments: [], created_at: null };
+  state.annotations = normalizeAnnotations(data.annotation);
   state.metadataChecks = data.annotation?.metadata_checks || {};
   state.highlights = [];
   state.virtualHighlightSeq = 0;
   state.argumentDescription = "";
   state.highlightSelection.concept.clear();
   state.highlightSelection.argument.clear();
+  state.highlightSelection.descriptor.clear();
   state.conceptType = "";
   state.editing.conceptId = null;
   state.editing.argumentId = null;
+  state.editing.descriptorId = null;
 
   const info = el("paperInfo");
   if (info) {
@@ -2194,10 +2430,13 @@ async function uploadPdf() {
   renderHighlightPickers();
   renderConceptList();
   renderArgumentList();
+  renderDescriptorList();
   renderArgumentConceptRefs();
+  renderDescriptorConceptRefs();
   renderArtifactTypeSelect();
   setConceptButtonMode();
   setArgumentButtonMode();
+  setDescriptorButtonMode();
   updateDescription("argument");
   if (loadingToast) loadingToast.remove();
   if (data.existing) {
@@ -2233,6 +2472,7 @@ async function submitAnnotations() {
     metadata_checks: state.metadataChecks,
     concepts: state.annotations.concepts,
     arguments: state.annotations.arguments,
+    descriptors: state.annotations.descriptors,
     created_at: state.annotations.created_at,
     pdf_hash: state.pdfHash,
   };
@@ -2308,10 +2548,13 @@ function init() {
   renderHighlightPickers();
   renderConceptList();
   renderArgumentList();
+  renderDescriptorList();
   renderArgumentConceptRefs();
+  renderDescriptorConceptRefs();
   renderArtifactTypeSelect();
   setConceptButtonMode();
   setArgumentButtonMode();
+  setDescriptorButtonMode();
   updateDescription("argument");
   wireTabs();
   wireNavigation();
@@ -2329,6 +2572,7 @@ function init() {
   el("docView").addEventListener("keyup", handleDocSelection);
   el("addConceptBtn").addEventListener("click", createConcept);
   el("addArgumentBtn").addEventListener("click", createArgument);
+  el("addDescriptorBtn").addEventListener("click", createDescriptor);
   el("submitBtn").addEventListener("click", submitAnnotations);
   const leftCollapseBtn = el("leftCollapseBtn");
   if (leftCollapseBtn) {
