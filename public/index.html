@@ -83,7 +83,7 @@
           </div>
 
           <div class="tab-bar">
-            <button class="tab active" data-tab="concept">Concept</button>
+            <button class="tab active" data-tab="concept">Artifact</button>
             <button class="tab" data-tab="argument">Argument</button>
           </div>
 
@@ -91,15 +91,15 @@
             <div class="stack">
               <label>Label <span class="required">*</span><input id="conceptLabel" type="text" placeholder="e.g., Latent Dirichlet Allocation" /></label>
               <label>Aliases <input id="conceptAliases" type="text" placeholder="Comma-separated" /></label>
-              <label>Category <span class="required">*</span></label>
-              <div id="conceptTypePicker" class="type-picker"></div>
-              <div id="conceptTypePath" class="muted"></div>
+              <label>Category <span class="required">*</span>
+                <select id="artifactType"></select>
+              </label>
             </div>
             <div class="stack source-refs">
               <div class="subhead">Source refs</div>
               <div id="highlightPicker"></div>
             </div>
-            <button id="addConceptBtn">Add Concept</button>
+            <button id="addConceptBtn">Add Artifact</button>
           </div>
 
           <div id="argumentTab" class="tab-content">
@@ -221,7 +221,7 @@
     </footer>
 
     <div id="selectionMenu" class="selection-menu hidden">
-      <button type="button" data-action="concept">Add to Concept Context</button>
+      <button type="button" data-action="concept">Add to Artifact Context</button>
       <button type="button" data-action="argument">Add to Argument Context</button>
     </div>
 

@@ -1,23 +1,13 @@
-const conceptTypeTree = [
-  {
-    label: "idea:Assumption",
-    children: [
-      { label: "idea:Methodological", children: [{ label: "idea:DataCollection" }] },
-      { label: "idea:Theoretical", children: [{ label: "idea:Analytical" }] },
-      { label: "idea:Scoping", children: [{ label: "idea:Negligence" }, { label: "idea:Restriction" }] },
-      { label: "idea:Resource", children: [{ label: "idea:Access" }, { label: "idea:Stability" }] },
-    ],
-  },
-  {
-    label: "idea:artifact",
-    children: [
-      { label: "idea:Algorithm" },
-      { label: "idea:Model" },
-      { label: "idea:Design" },
-      { label: "idea:Framework" },
-      { label: "idea:Dataset" },
-    ],
-  },
+const artifactTypes = [
+  "algorithm",
+  "component",
+  "dataset",
+  "framework",
+  "hyperparameter",
+  "metric",
+  "model",
+  "task",
+  "resource",
 ];
 
 const argumentTypes = [
@@ -58,7 +48,7 @@ const state = {
     concept: new Set(),
     argument: new Set(),
   },
-  conceptTypePath: [],
+  conceptType: "",
   library: {
     items: [],
     filtered: [],
@@ -418,64 +408,28 @@ function normalizeAliases(value) {
     .filter(Boolean);
 }
 
-function renderConceptTypePicker(path = state.conceptTypePath) {
-  const container = el("conceptTypePicker");
-  if (!container) return;
-  container.innerHTML = "";
+function renderArtifactTypeSelect() {
+  const select = el("artifactType");
+  if (!select) return;
+  const current = state.conceptType || "";
+  select.innerHTML = "";
 
-  let nodes = conceptTypeTree;
-  let depth = 0;
-  const currentPath = Array.isArray(path) ? path : [];
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Select a category";
+  select.appendChild(placeholder);
 
-  while (nodes && nodes.length) {
-    const select = document.createElement("select");
-      const placeholder = document.createElement("option");
-      placeholder.value = "";
-      placeholder.textContent = depth === 0 ? "Select a category" : "Stop here";
-      placeholder.disabled = depth === 0;
-    select.appendChild(placeholder);
+  artifactTypes.forEach((type) => {
+    const option = document.createElement("option");
+    option.value = type;
+    option.textContent = formatTypeLabel(type);
+    select.appendChild(option);
+  });
 
-    nodes.forEach((node) => {
-      const option = document.createElement("option");
-      option.value = node.label;
-      option.textContent = node.label;
-      select.appendChild(option);
-    });
-
-    const value = currentPath[depth] || "";
-    if (value) {
-      select.value = value;
-    } else if (depth === 0) {
-      select.selectedIndex = 0;
-    }
-
-    const depthIndex = depth;
-    select.addEventListener("change", (e) => {
-      const nextValue = e.target.value;
-      const nextPath = state.conceptTypePath.slice(0, depthIndex);
-      if (nextValue) nextPath.push(nextValue);
-      state.conceptTypePath = nextPath;
-      renderConceptTypePicker(nextPath);
-      renderConceptTypePath();
-    });
-
-    container.appendChild(select);
-
-    if (!value) break;
-    const node = nodes.find((item) => item.label === value);
-    nodes = node?.children || [];
-    depth += 1;
-  }
-}
-
-function renderConceptTypePath() {
-  const display = el("conceptTypePath");
-  if (!display) return;
-  if (!state.conceptTypePath.length) {
-    display.textContent = "Select a category. You can stop at any level.";
-    return;
-  }
-  display.textContent = `Selected: ${state.conceptTypePath.join(" > ")}`;
+  select.value = artifactTypes.includes(current) ? current : "";
+  select.onchange = (event) => {
+    state.conceptType = event.target.value || "";
+  };
 }
 
 function normalizeArgType(value) {
@@ -494,7 +448,7 @@ function activateAnnotationTab(tabName) {
 function setConceptButtonMode() {
   const btn = el("addConceptBtn");
   if (!btn) return;
-  btn.textContent = state.editing.conceptId ? "Save Concept" : "Add Concept";
+  btn.textContent = state.editing.conceptId ? "Save Artifact" : "Add Artifact";
 }
 
 function setArgumentButtonMode() {
@@ -508,10 +462,11 @@ function resetConceptEditor() {
   clearVirtualHighlights("concept");
   el("conceptLabel").value = "";
   el("conceptAliases").value = "";
-  state.conceptTypePath = [];
+  state.conceptType = "";
+  const typeSelect = el("artifactType");
+  if (typeSelect) typeSelect.value = "";
   state.highlightSelection.concept.clear();
-  renderConceptTypePicker();
-  renderConceptTypePath();
+  renderArtifactTypeSelect();
   renderHighlightPickers();
   setConceptButtonMode();
   renderConceptList();
@@ -544,13 +499,11 @@ function startConceptEdit(conceptId) {
   activateAnnotationTab("concept");
   el("conceptLabel").value = concept.label || "";
   el("conceptAliases").value = (concept.aliases || []).join(", ");
-  state.conceptTypePath = String(concept.type || "")
-    .split(" > ")
-    .map((part) => part.trim())
-    .filter(Boolean);
+  state.conceptType = String(concept.type || "").trim().toLowerCase();
+  const typeSelect = el("artifactType");
+  if (typeSelect) typeSelect.value = state.conceptType;
   hydrateSourceRefsForEdit("concept", concept.source_refs, true);
-  renderConceptTypePicker();
-  renderConceptTypePath();
+  renderArtifactTypeSelect();
   renderHighlightPickers();
   setConceptButtonMode();
   renderConceptList();
@@ -2096,17 +2049,17 @@ function addHighlight(target) {
 function createConcept() {
   const label = el("conceptLabel").value.trim();
   if (!label) {
-    showToast("Add a concept label.", "error");
+    showToast("Add an artifact label.", "error");
     return;
   }
 
   const aliases = normalizeAliases(el("conceptAliases").value);
-  const typePath = state.conceptTypePath || [];
-  if (!typePath.length) {
-    showToast("Select a concept category.", "error");
+  const type = String(el("artifactType")?.value || state.conceptType || "").trim().toLowerCase();
+  state.conceptType = type;
+  if (!type) {
+    showToast("Select an artifact category.", "error");
     return;
   }
-  const type = typePath.join(" > ");
 
   const selectedConceptId = Array.from(state.highlightSelection.concept)[0];
   const sourceRefs = selectedConceptId
@@ -2145,7 +2098,7 @@ function createConcept() {
   renderArgumentConceptRefs();
   renderHighlightPickers();
   if (editingId) {
-    showToast("Concept updated.", "success");
+    showToast("Artifact updated.", "success");
   }
 }
 
@@ -2227,7 +2180,7 @@ async function uploadPdf() {
   state.argumentDescription = "";
   state.highlightSelection.concept.clear();
   state.highlightSelection.argument.clear();
-  state.conceptTypePath = [];
+  state.conceptType = "";
   state.editing.conceptId = null;
   state.editing.argumentId = null;
 
@@ -2242,8 +2195,7 @@ async function uploadPdf() {
   renderConceptList();
   renderArgumentList();
   renderArgumentConceptRefs();
-  renderConceptTypePicker();
-  renderConceptTypePath();
+  renderArtifactTypeSelect();
   setConceptButtonMode();
   setArgumentButtonMode();
   updateDescription("argument");
@@ -2357,8 +2309,7 @@ function init() {
   renderConceptList();
   renderArgumentList();
   renderArgumentConceptRefs();
-  renderConceptTypePicker();
-  renderConceptTypePath();
+  renderArtifactTypeSelect();
   setConceptButtonMode();
   setArgumentButtonMode();
   updateDescription("argument");
