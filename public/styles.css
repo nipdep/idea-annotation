@@ -257,6 +257,7 @@ body {
 .graph-node-arg-class {
   fill: #f3ece3;
   stroke: #6c5e51;
+  stroke-width: 2.3;
 }
 
 .graph-node-artifact {
@@ -283,6 +284,11 @@ body {
   font-size: 12px;
   fill: var(--ink);
   font-weight: 600;
+}
+
+.graph-label-argument-class {
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .graph-edge-label {
@@ -346,6 +352,14 @@ body {
 
 .graph-legend {
   pointer-events: none;
+}
+
+g.draggable-node {
+  cursor: grab;
+}
+
+g.draggable-node:active {
+  cursor: grabbing;
 }
 
 details {

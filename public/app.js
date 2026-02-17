@@ -188,7 +188,8 @@ function hydrateSourceRefsForEdit(target, sourceRefs, single = false) {
     if (single && idx > 0) return;
     const section = ref.section || "Body";
     const page = ref.page == null ? "" : String(ref.page);
-    const text = page ? `${section} (p.${page})` : section;
+    const fallbackText = page ? `${section} (p.${page})` : section;
+    const text = normalizeSourceRefValue(ref.text, fallbackText);
     const id = `V${++state.virtualHighlightSeq}`;
 
     state.highlights.push({
@@ -852,39 +853,63 @@ function drawGraphEdges(svgSel, edges, nodeMap) {
   const edgeGroup = svgSel.append("g");
   const labelGroup = svgSel.append("g");
 
-  edges.forEach((edge) => {
-    const source = nodeMap.get(edge.source);
-    const target = nodeMap.get(edge.target);
-    if (!source || !target) return;
+  const lines = edgeGroup
+    .selectAll("line")
+    .data(edges)
+    .join("line")
+    .attr("class", (edge) => `graph-edge graph-edge-${edge.type || "default"}`)
+    .attr("stroke-width", (edge) => edge.weight || 1.2)
+    .attr("marker-end", (edge) => (edge.directed ? "url(#arrowhead)" : null));
 
-    const dx = target.x - source.x;
-    const dy = target.y - source.y;
-    const length = Math.hypot(dx, dy) || 1;
-    const x1 = source.x + (dx / length) * (source.r || 0);
-    const y1 = source.y + (dy / length) * (source.r || 0);
-    const x2 = target.x - (dx / length) * ((target.r || 0) + 4);
-    const y2 = target.y - (dy / length) * ((target.r || 0) + 4);
+  const labels = labelGroup
+    .selectAll("text")
+    .data(edges.filter((edge) => edge.label))
+    .join("text")
+    .attr("text-anchor", "middle")
+    .attr("class", (edge) => `graph-edge-label graph-edge-label-${edge.type || "default"}`)
+    .text((edge) => edge.label);
 
-    edgeGroup
-      .append("line")
-      .attr("class", `graph-edge graph-edge-${edge.type || "default"}`)
-      .attr("x1", x1)
-      .attr("y1", y1)
-      .attr("x2", x2)
-      .attr("y2", y2)
-      .attr("stroke-width", edge.weight || 1.2)
-      .attr("marker-end", edge.directed ? "url(#arrowhead)" : null);
+  function nodeRadius(node) {
+    if (!node) return 0;
+    if (node.nodeKind === "artifact") return Math.max(node.rx || 0, node.ry || 0);
+    return node.r || 0;
+  }
 
-    if (edge.label) {
-      labelGroup
-        .append("text")
-        .attr("x", (x1 + x2) / 2)
-        .attr("y", (y1 + y2) / 2 - 6)
-        .attr("text-anchor", "middle")
-        .attr("class", `graph-edge-label graph-edge-label-${edge.type || "default"}`)
-        .text(edge.label);
-    }
-  });
+  function updatePositions() {
+    lines.each(function updateLine(edge) {
+      const source = nodeMap.get(edge.source);
+      const target = nodeMap.get(edge.target);
+      if (!source || !target) return;
+
+      const dx = target.x - source.x;
+      const dy = target.y - source.y;
+      const length = Math.hypot(dx, dy) || 1;
+      const sourceRadius = nodeRadius(source);
+      const targetRadius = nodeRadius(target);
+      const x1 = source.x + (dx / length) * sourceRadius;
+      const y1 = source.y + (dy / length) * sourceRadius;
+      const x2 = target.x - (dx / length) * (targetRadius + 4);
+      const y2 = target.y - (dy / length) * (targetRadius + 4);
+      window.d3.select(this).attr("x1", x1).attr("y1", y1).attr("x2", x2).attr("y2", y2);
+    });
+
+    labels
+      .attr("x", (edge) => {
+        const source = nodeMap.get(edge.source);
+        const target = nodeMap.get(edge.target);
+        if (!source || !target) return 0;
+        return (source.x + target.x) / 2;
+      })
+      .attr("y", (edge) => {
+        const source = nodeMap.get(edge.source);
+        const target = nodeMap.get(edge.target);
+        if (!source || !target) return 0;
+        return (source.y + target.y) / 2 - 6;
+      });
+  }
+
+  updatePositions();
+  return { updatePositions };
 }
 
 function renderPaperFocusedGraph(svg, item) {
@@ -974,7 +999,7 @@ function renderPaperFocusedGraph(svg, item) {
       label: name,
       nodeKind: "argument-class",
       className: name,
-      r: 16,
+      r: 22,
       hasInstances: (argumentByClass[name] || []).length > 0,
     })),
     width,
@@ -991,7 +1016,8 @@ function renderPaperFocusedGraph(svg, item) {
       label: artifact.data?.label || artifact.id,
       nodeKind: "artifact",
       entity: artifact,
-      r: 14,
+      rx: 24,
+      ry: 14,
     })),
     width,
     90,
@@ -1000,6 +1026,13 @@ function renderPaperFocusedGraph(svg, item) {
     54,
     6
   );
+
+  artifactNodes.forEach((node) => {
+    const cached = state.library.graphPositions[node.id];
+    if (!cached) return;
+    node.x = cached.x;
+    node.y = cached.y;
+  });
 
   const nodeMap = new Map();
   [...classNodes, ...artifactNodes].forEach((node) => nodeMap.set(node.id, node));
@@ -1030,7 +1063,7 @@ function renderPaperFocusedGraph(svg, item) {
         label: inst.id,
         nodeKind: "argument",
         entity: inst,
-        r: 11,
+        r: 14,
       })),
       width,
       Math.max(70, classNode.x - 75),
@@ -1085,7 +1118,8 @@ function renderPaperFocusedGraph(svg, item) {
         label: formatTypeLabel(descriptor.data?.descriptor_type || "descriptor"),
         nodeKind: "descriptor",
         entity: descriptor,
-        r: 11,
+        r: 14,
+        parentArtifactId: artifactId,
       })),
       width,
       Math.max(70, artifactNode.x - 78),
@@ -1108,7 +1142,7 @@ function renderPaperFocusedGraph(svg, item) {
     });
   });
 
-  drawGraphEdges(svgSel, edges, nodeMap);
+  const edgeRenderer = drawGraphEdges(svgSel, edges, nodeMap);
 
   const nodes = [...nodeMap.values()];
   const nodeSelection = svgSel
@@ -1116,13 +1150,11 @@ function renderPaperFocusedGraph(svg, item) {
     .selectAll("g")
     .data(nodes)
     .join("g")
+    .classed("draggable-node", (d) => d.nodeKind === "artifact")
     .style("cursor", "pointer")
     .attr("transform", (d) => `translate(${d.x}, ${d.y})`);
 
-  nodeSelection
-    .append("circle")
-    .attr("r", (d) => d.r)
-    .attr("class", (d) => {
+  const nodeClassName = (d) => {
       const isActiveClass =
         d.nodeKind === "argument-class" && state.library.expanded.has(`arg:${d.className}`);
       const isActiveArtifact =
@@ -1150,7 +1182,20 @@ function renderPaperFocusedGraph(svg, item) {
       if (d.nodeKind === "argument-class" && !d.hasInstances) classes.push("empty");
       if (isActiveClass || isActiveArtifact || isSelected) classes.push("active");
       return classes.join(" ");
-    });
+    };
+
+  nodeSelection
+    .filter((d) => d.nodeKind !== "artifact")
+    .append("circle")
+    .attr("r", (d) => d.r)
+    .attr("class", nodeClassName);
+
+  nodeSelection
+    .filter((d) => d.nodeKind === "artifact")
+    .append("ellipse")
+    .attr("rx", (d) => d.rx || 24)
+    .attr("ry", (d) => d.ry || 14)
+    .attr("class", nodeClassName);
 
   nodeSelection
     .append("text")
@@ -1164,7 +1209,42 @@ function renderPaperFocusedGraph(svg, item) {
       return d.label;
     });
 
+  const artifactDrag = window.d3
+    .drag()
+    .on("start", (event) => {
+      event.sourceEvent?.stopPropagation();
+    })
+    .on("drag", (event, d) => {
+      const prevX = d.x;
+      const prevY = d.y;
+      d.x = Math.max(42, Math.min(width - 42, event.x));
+      d.y = Math.max(42, Math.min(height - 42, event.y));
+      const dx = d.x - prevX;
+      const dy = d.y - prevY;
+
+      const artifactId = d.entity?.id;
+      if (artifactId) {
+        nodes.forEach((node) => {
+          if (node.nodeKind === "descriptor" && node.parentArtifactId === artifactId) {
+            node.x = Math.max(42, Math.min(width - 42, node.x + dx));
+            node.y = Math.max(42, Math.min(height - 42, node.y + dy));
+          }
+        });
+      }
+
+      nodeSelection.attr("transform", (node) => `translate(${node.x}, ${node.y})`);
+      edgeRenderer.updatePositions();
+    })
+    .on("end", (event, d) => {
+      const artifactId = d.entity?.id;
+      if (!artifactId) return;
+      state.library.graphPositions[`artifact:${artifactId}`] = { x: d.x, y: d.y };
+    });
+
+  nodeSelection.filter((d) => d.nodeKind === "artifact").call(artifactDrag);
+
   nodeSelection.on("click", (event, d) => {
+    if (event.defaultPrevented) return;
     event.stopPropagation();
     if (d.nodeKind === "argument-class") {
       const key = `arg:${d.className}`;
@@ -1401,9 +1481,18 @@ function renderLibraryDetail() {
     } else if (inst.kind === "descriptor") {
       const descriptor = (selected.descriptors || []).find((d) => d.descriptor_id === inst.id);
       if (descriptor) {
+        const sourceTexts = Array.isArray(descriptor.source_refs)
+          ? descriptor.source_refs
+              .map((ref) => normalizeSourceRefValue(ref?.text, ""))
+              .filter(Boolean)
+          : [];
         const fields = [
           { label: "Class", value: formatTypeLabel(descriptor.descriptor_type || "") },
           { label: "Label", value: descriptor.descriptor_id || "-" },
+          {
+            label: "Source text",
+            value: sourceTexts.length ? sourceTexts.join(" | ") : "",
+          },
           {
             label: "Source refs",
             value: Array.isArray(descriptor.source_refs) && descriptor.source_refs.length
@@ -2182,10 +2271,13 @@ function removeHighlightsForSourceRefs(target, sourceRefs) {
   sourceRefs.forEach((ref) => {
     const section = normalizeSourceRefValue(ref?.section, "Body");
     const page = normalizeSourceRefValue(ref?.page, "");
+    const text = normalizeSourceRefValue(ref?.text, "");
     const match = pool.find((hl) => {
       if (consumedIds.includes(hl.id)) return false;
       const hlSection = normalizeSourceRefValue(hl.section, "Body");
       const hlPage = normalizeSourceRefValue(hl.page, "");
+      const hlText = normalizeSourceRefValue(hl.text, "");
+      if (text && hlText !== text) return false;
       return hlSection === section && hlPage === page;
     });
     if (match) consumedIds.push(match.id);
@@ -2526,7 +2618,11 @@ function createDescriptor() {
     .map((id) => {
       const hl = state.highlights.find((h) => h.id === id);
       if (!hl) return null;
-      return { section: hl.section, page: hl.page || null };
+      return {
+        section: hl.section,
+        page: hl.page || null,
+        text: hl.text || "",
+      };
     })
     .filter(Boolean);
 

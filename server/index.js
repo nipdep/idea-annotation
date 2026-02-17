@@ -44,6 +44,22 @@ function saveIndex(index) {
   fs.writeFileSync(INDEX_PATH, JSON.stringify(index, null, 2));
 }
 
+function hasMetadataObject(metadata) {
+  return !!metadata && typeof metadata === "object" && !Array.isArray(metadata) && Object.keys(metadata).length > 0;
+}
+
+function resolvePaperMetadata(loaded, fallbackMetadata = null) {
+  const annotationMetadata = loaded?.annotation?.metadata;
+  if (hasMetadataObject(annotationMetadata)) return annotationMetadata;
+  if (hasMetadataObject(fallbackMetadata)) return fallbackMetadata;
+  return loaded?.metadata || {};
+}
+
+function findIndexEntryByPaperId(index, paperId) {
+  const items = index?.items || {};
+  return Object.values(items).find((entry) => entry?.paper_id === paperId) || null;
+}
+
 function hashFile(filePath) {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash("sha256");
@@ -62,12 +78,13 @@ function loadPaper(paperId) {
   if (!fs.existsSync(mdPath) || !fs.existsSync(teiPath)) return null;
 
   const teiXml = fs.readFileSync(teiPath, "utf8");
-  const { metadata, doc } = teiToDoc(teiXml);
+  const { metadata: extractedMetadata, doc } = teiToDoc(teiXml);
   const annotation = fs.existsSync(jsonPath)
     ? JSON.parse(fs.readFileSync(jsonPath, "utf8"))
     : null;
+  const metadata = hasMetadataObject(annotation?.metadata) ? annotation.metadata : extractedMetadata;
 
-  return { teiXml, metadata, doc, annotation };
+  return { teiXml, metadata, extractedMetadata, doc, annotation };
 }
 
 function renderIndex(res) {
@@ -169,9 +186,10 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
       const existingPaper = loadPaper(existing.paper_id);
       if (existingPaper) {
         fs.unlinkSync(tempPath);
+        const metadata = resolvePaperMetadata(existingPaper, existing.metadata);
         return res.json({
           paper_id: existing.paper_id,
-          metadata: existingPaper.metadata,
+          metadata,
           doc: existingPaper.doc,
           tei_xml: existingPaper.teiXml,
           annotation: existingPaper.annotation,
@@ -206,6 +224,7 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
     index.items[pdfHash] = {
       paper_id: paperId,
       uploaded_at: new Date().toISOString(),
+      metadata,
     };
     saveIndex(index);
 
@@ -231,10 +250,13 @@ app.get("/api/paper/:id", (req, res) => {
     if (!loaded) {
       return res.status(404).json({ error: "Paper not found" });
     }
+    const index = loadIndex();
+    const entry = findIndexEntryByPaperId(index, paperId);
+    const metadata = resolvePaperMetadata(loaded, entry?.metadata);
 
     res.json({
       paper_id: paperId,
-      metadata: loaded.metadata,
+      metadata,
       doc: loaded.doc,
       tei_xml: loaded.teiXml,
       annotation: loaded.annotation,
@@ -277,6 +299,22 @@ app.post("/api/annotation/:id", (req, res) => {
     };
 
     fs.writeFileSync(paperPath(paperId, "json"), JSON.stringify(out, null, 2));
+
+    const index = loadIndex();
+    const hash = String(payload.pdf_hash || "").trim();
+    if (hash && index.items?.[hash]) {
+      index.items[hash].metadata = payload.metadata || {};
+    } else {
+      const items = index.items || {};
+      Object.keys(items).forEach((key) => {
+        const entry = items[key];
+        if (entry?.paper_id === paperId) {
+          items[key].metadata = payload.metadata || {};
+        }
+      });
+    }
+    saveIndex(index);
+
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -387,10 +425,11 @@ app.get("/api/papers", (req, res) => {
         if (!entry?.paper_id) return;
         const loaded = loadPaper(entry.paper_id);
         if (!loaded) return;
+        const metadata = resolvePaperMetadata(loaded, entry.metadata);
         items.push({
           paper_id: entry.paper_id,
           pdf_hash: hash,
-          metadata: loaded.metadata,
+          metadata,
           concepts: loaded.annotation?.concepts || [],
           arguments: loaded.annotation?.arguments || [],
           descriptors: loaded.annotation?.descriptors || [],
