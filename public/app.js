@@ -960,37 +960,58 @@ function renderPaperFocusedGraph(svg, item) {
     { key: "descriptors", y: 418, h: 96, label: "DESCRIPTORS" },
   ];
 
+  const goBackToPaperGraph = () => {
+    state.library.selectedId = null;
+    state.library.selectedInstance = null;
+    state.library.expanded = new Set();
+    renderLibraryGraph();
+    renderLibraryTable();
+    renderLibraryDetail();
+  };
+
   svgSel
     .append("rect")
     .attr("x", 0)
     .attr("y", 0)
     .attr("width", width)
     .attr("height", height)
-    .attr("fill", "transparent")
-    .on("click", () => {
-      state.library.selectedId = null;
-      state.library.selectedInstance = null;
-      state.library.expanded = new Set();
-      renderLibraryGraph();
-      renderLibraryTable();
-      renderLibraryDetail();
-    });
+    .attr("fill", "transparent");
 
   svgSel
     .append("text")
     .attr("x", 20)
-    .attr("y", 28)
+    .attr("y", 32)
     .attr("fill", "#1e1b16")
     .attr("font-size", "14")
     .text((item.metadata?.title || "Selected Paper").slice(0, 95));
 
-  svgSel
+  const backButton = svgSel
+    .append("g")
+    .attr("class", "graph-back-button")
+    .attr("transform", `translate(${width - 112}, 14)`)
+    .style("cursor", "pointer")
+    .on("click", (event) => {
+      event.stopPropagation();
+      goBackToPaperGraph();
+    });
+
+  backButton
+    .append("rect")
+    .attr("class", "graph-back-button-bg")
+    .attr("x", 0)
+    .attr("y", 0)
+    .attr("width", 84)
+    .attr("height", 26)
+    .attr("rx", 9)
+    .attr("ry", 9);
+
+  backButton
     .append("text")
-    .attr("x", 20)
-    .attr("y", 46)
-    .attr("fill", "#6b6157")
-    .attr("font-size", "11")
-    .text("Top: Arguments | Middle: Artifacts | Bottom: Descriptors");
+    .attr("class", "graph-back-button-label")
+    .attr("x", 42)
+    .attr("y", 17)
+    .attr("text-anchor", "middle")
+    .text("Go back");
 
   const layerGroup = svgSel.append("g");
   layerBands.forEach((band) => {

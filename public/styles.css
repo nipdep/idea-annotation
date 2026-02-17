@@ -354,6 +354,23 @@ body {
   pointer-events: none;
 }
 
+.graph-back-button-bg {
+  fill: #fff8ef;
+  stroke: #d7cabc;
+  stroke-width: 1;
+}
+
+.graph-back-button:hover .graph-back-button-bg {
+  fill: #f6ebde;
+}
+
+.graph-back-button-label {
+  fill: #4f463d;
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
 g.draggable-node {
   cursor: grab;
 }
