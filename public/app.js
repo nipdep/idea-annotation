@@ -801,24 +801,48 @@ function renderLibraryGraph() {
   });
 }
 
-function layoutNodesInLayer(items, width, minX, maxX, startY, rowGap, maxCols) {
-  if (!items.length) return [];
-  const cols = Math.min(maxCols, items.length);
-  const rows = Math.ceil(items.length / cols);
-  const nodes = [];
-  const xStep = cols > 1 ? (maxX - minX) / (cols - 1) : 0;
-  const baseY = startY - ((rows - 1) * rowGap) / 2;
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
 
-  items.forEach((item, idx) => {
+function layoutNodesInBand(items, minX, maxX, minY, maxY, maxCols) {
+  if (!items.length) return [];
+  const cols = Math.min(Math.max(1, maxCols), items.length);
+  const rows = Math.ceil(items.length / cols);
+  const xSpan = Math.max(0, maxX - minX);
+  const ySpan = Math.max(0, maxY - minY);
+  const xStep = cols > 1 ? xSpan / (cols - 1) : 0;
+  const yStep = rows > 1 ? ySpan / (rows - 1) : 0;
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+
+  return items.map((item, idx) => {
     const row = Math.floor(idx / cols);
     const col = idx % cols;
-    nodes.push({
+    return {
       ...item,
-      x: cols === 1 ? (minX + maxX) / 2 : minX + xStep * col,
-      y: baseY + row * rowGap,
-    });
+      x: cols === 1 ? centerX : minX + xStep * col,
+      y: rows === 1 ? centerY : minY + yStep * row,
+    };
   });
-  return nodes;
+}
+
+function getBandBounds(layerBands, key, padX = 0, padY = 0, width = 860) {
+  const band = layerBands.find((entry) => entry.key === key);
+  if (!band) {
+    return {
+      minX: 40,
+      maxX: 820,
+      minY: 40,
+      maxY: 520,
+    };
+  }
+  return {
+    minX: 18 + padX,
+    maxX: width - 18 - padX,
+    minY: band.y + padY,
+    maxY: band.y + band.h - padY,
+  };
 }
 
 function buildLayeredGraphData(item) {
@@ -869,9 +893,18 @@ function drawGraphEdges(svgSel, edges, nodeMap) {
     .attr("class", (edge) => `graph-edge-label graph-edge-label-${edge.type || "default"}`)
     .text((edge) => edge.label);
 
-  function nodeRadius(node) {
+  function nodeRadius(node, dx = 0, dy = 0) {
     if (!node) return 0;
-    if (node.nodeKind === "artifact") return Math.max(node.rx || 0, node.ry || 0);
+    if (node.nodeKind === "argument-class") {
+      const halfWidth = (node.w || 0) / 2;
+      const halfHeight = (node.h || 0) / 2;
+      if (!halfWidth || !halfHeight) return 0;
+      const absDx = Math.abs(dx) || 0.0001;
+      const absDy = Math.abs(dy) || 0.0001;
+      const distanceToVertical = (halfWidth * Math.hypot(dx, dy)) / absDx;
+      const distanceToHorizontal = (halfHeight * Math.hypot(dx, dy)) / absDy;
+      return Math.min(distanceToVertical, distanceToHorizontal);
+    }
     return node.r || 0;
   }
 
@@ -884,8 +917,8 @@ function drawGraphEdges(svgSel, edges, nodeMap) {
       const dx = target.x - source.x;
       const dy = target.y - source.y;
       const length = Math.hypot(dx, dy) || 1;
-      const sourceRadius = nodeRadius(source);
-      const targetRadius = nodeRadius(target);
+      const sourceRadius = nodeRadius(source, dx, dy);
+      const targetRadius = nodeRadius(target, -dx, -dy);
       const x1 = source.x + (dx / length) * sourceRadius;
       const y1 = source.y + (dy / length) * sourceRadius;
       const x2 = target.x - (dx / length) * (targetRadius + 4);
@@ -922,9 +955,9 @@ function renderPaperFocusedGraph(svg, item) {
   svgSel.selectAll("*").remove();
 
   const layerBands = [
-    { key: "arguments", y: 72, h: 122, label: "ARGUMENT CLASSES" },
-    { key: "artifacts", y: 220, h: 122, label: "ARTIFACTS" },
-    { key: "descriptors", y: 368, h: 164, label: "DESCRIPTORS" },
+    { key: "arguments", y: 72, h: 126, label: "ARGUMENT" },
+    { key: "artifacts", y: 214, h: 188, label: "ARTIFACTS" },
+    { key: "descriptors", y: 418, h: 96, label: "DESCRIPTORS" },
   ];
 
   svgSel
@@ -993,45 +1026,49 @@ function renderPaperFocusedGraph(svg, item) {
     .attr("d", "M0,-5L10,0L0,5")
     .attr("fill", "#d0c6bd");
 
-  const classNodes = layoutNodesInLayer(
+  const argumentBand = getBandBounds(layerBands, "arguments", 40, 10, width);
+  const artifactBand = getBandBounds(layerBands, "artifacts", 44, 16, width);
+  const descriptorBand = getBandBounds(layerBands, "descriptors", 36, 14, width);
+
+  const classNodes = layoutNodesInBand(
     argumentClassNames.map((name) => ({
       id: `class:${name}`,
       label: name,
       nodeKind: "argument-class",
       className: name,
-      r: 22,
+      w: 96,
+      h: 44,
+      rx: 13,
       hasInstances: (argumentByClass[name] || []).length > 0,
     })),
-    width,
-    70,
-    width - 70,
-    110,
-    0,
+    argumentBand.minX,
+    argumentBand.maxX,
+    argumentBand.minY + 10,
+    argumentBand.minY + 10,
     argumentClassNames.length
   );
 
-  const artifactNodes = layoutNodesInLayer(
+  const artifactCols = Math.min(8, Math.max(3, Math.ceil(Math.sqrt(Math.max(1, artifacts.length)))));
+  const artifactNodes = layoutNodesInBand(
     artifacts.map((artifact) => ({
       id: `artifact:${artifact.id}`,
       label: artifact.data?.label || artifact.id,
       nodeKind: "artifact",
       entity: artifact,
-      rx: 24,
-      ry: 14,
+      r: 14,
     })),
-    width,
-    90,
-    width - 90,
-    300,
-    54,
-    6
+    artifactBand.minX,
+    artifactBand.maxX,
+    artifactBand.minY + 12,
+    artifactBand.maxY - 12,
+    artifactCols
   );
 
   artifactNodes.forEach((node) => {
     const cached = state.library.graphPositions[node.id];
     if (!cached) return;
-    node.x = cached.x;
-    node.y = cached.y;
+    node.x = clamp(cached.x, artifactBand.minX, artifactBand.maxX);
+    node.y = clamp(cached.y, artifactBand.minY + 12, artifactBand.maxY - 12);
   });
 
   const nodeMap = new Map();
@@ -1057,7 +1094,7 @@ function renderPaperFocusedGraph(svg, item) {
     const instances = argumentByClass[className] || [];
     if (!classNode || !instances.length) return;
 
-    const instanceNodes = layoutNodesInLayer(
+    const instanceNodes = layoutNodesInBand(
       instances.map((inst) => ({
         id: `argument:${inst.id}`,
         label: inst.id,
@@ -1065,11 +1102,10 @@ function renderPaperFocusedGraph(svg, item) {
         entity: inst,
         r: 14,
       })),
-      width,
-      Math.max(70, classNode.x - 75),
-      Math.min(width - 70, classNode.x + 75),
-      classNode.y + 70,
-      28,
+      clamp(classNode.x - 75, argumentBand.minX, argumentBand.maxX - 40),
+      clamp(classNode.x + 75, argumentBand.minX + 40, argumentBand.maxX),
+      argumentBand.minY + 52,
+      argumentBand.maxY - 16,
       3
     );
 
@@ -1112,7 +1148,7 @@ function renderPaperFocusedGraph(svg, item) {
     );
     if (!relatedDescriptors.length) return;
 
-    const descriptorNodes = layoutNodesInLayer(
+    const descriptorNodes = layoutNodesInBand(
       relatedDescriptors.map((descriptor) => ({
         id: `descriptor:${descriptor.id}:for:${artifactId}`,
         label: formatTypeLabel(descriptor.data?.descriptor_type || "descriptor"),
@@ -1121,15 +1157,19 @@ function renderPaperFocusedGraph(svg, item) {
         r: 14,
         parentArtifactId: artifactId,
       })),
-      width,
-      Math.max(70, artifactNode.x - 78),
-      Math.min(width - 70, artifactNode.x + 78),
-      Math.min(height - 40, artifactNode.y + 118),
-      24,
+      clamp(artifactNode.x - 78, descriptorBand.minX, descriptorBand.maxX - 48),
+      clamp(artifactNode.x + 78, descriptorBand.minX + 48, descriptorBand.maxX),
+      descriptorBand.minY + 16,
+      descriptorBand.maxY - 14,
       3
     );
 
     descriptorNodes.forEach((descNode) => {
+      const cached = state.library.graphPositions[descNode.id];
+      if (cached) {
+        descNode.x = clamp(cached.x, descriptorBand.minX, descriptorBand.maxX);
+        descNode.y = clamp(cached.y, descriptorBand.minY + 16, descriptorBand.maxY - 14);
+      }
       nodeMap.set(descNode.id, descNode);
       edges.push({
         source: artifactNode.id,
@@ -1150,8 +1190,8 @@ function renderPaperFocusedGraph(svg, item) {
     .selectAll("g")
     .data(nodes)
     .join("g")
-    .classed("draggable-node", (d) => d.nodeKind === "artifact")
-    .style("cursor", "pointer")
+    .classed("draggable-node", (d) => d.nodeKind === "artifact" || d.nodeKind === "descriptor")
+    .style("cursor", (d) => (d.nodeKind === "artifact" || d.nodeKind === "descriptor" ? "grab" : "pointer"))
     .attr("transform", (d) => `translate(${d.x}, ${d.y})`);
 
   const nodeClassName = (d) => {
@@ -1174,7 +1214,7 @@ function renderPaperFocusedGraph(svg, item) {
           state.library.selectedInstance?.id === d.entity.id);
 
       const classes = ["graph-node"];
-      if (d.nodeKind === "argument" || d.nodeKind === "descriptor") classes.push("small-node");
+      if (d.nodeKind !== "argument-class") classes.push("small-node");
       if (d.nodeKind === "argument-class") classes.push("graph-node-arg-class");
       if (d.nodeKind === "artifact") classes.push("graph-node-artifact");
       if (d.nodeKind === "argument") classes.push("graph-node-argument");
@@ -1185,16 +1225,20 @@ function renderPaperFocusedGraph(svg, item) {
     };
 
   nodeSelection
-    .filter((d) => d.nodeKind !== "artifact")
-    .append("circle")
-    .attr("r", (d) => d.r)
+    .filter((d) => d.nodeKind === "argument-class")
+    .append("rect")
+    .attr("x", (d) => -((d.w || 96) / 2))
+    .attr("y", (d) => -((d.h || 44) / 2))
+    .attr("width", (d) => d.w || 96)
+    .attr("height", (d) => d.h || 44)
+    .attr("rx", (d) => d.rx || 13)
+    .attr("ry", (d) => d.rx || 13)
     .attr("class", nodeClassName);
 
   nodeSelection
-    .filter((d) => d.nodeKind === "artifact")
-    .append("ellipse")
-    .attr("rx", (d) => d.rx || 24)
-    .attr("ry", (d) => d.ry || 14)
+    .filter((d) => d.nodeKind !== "argument-class")
+    .append("circle")
+    .attr("r", (d) => d.r)
     .attr("class", nodeClassName);
 
   nodeSelection
@@ -1204,12 +1248,12 @@ function renderPaperFocusedGraph(svg, item) {
     .attr("dy", 4)
     .style("pointer-events", "none")
     .text((d) => {
-      if (d.nodeKind === "artifact") return d.label.slice(0, 20);
+      if (d.nodeKind === "artifact") return d.label.slice(0, 18);
       if (d.nodeKind === "descriptor") return d.label.slice(0, 16);
       return d.label;
     });
 
-  const artifactDrag = window.d3
+  const movableDrag = window.d3
     .drag()
     .on("start", (event) => {
       event.sourceEvent?.stopPropagation();
@@ -1217,17 +1261,27 @@ function renderPaperFocusedGraph(svg, item) {
     .on("drag", (event, d) => {
       const prevX = d.x;
       const prevY = d.y;
-      d.x = Math.max(42, Math.min(width - 42, event.x));
-      d.y = Math.max(42, Math.min(height - 42, event.y));
+      const band =
+        d.nodeKind === "artifact"
+          ? artifactBand
+          : d.nodeKind === "descriptor"
+            ? descriptorBand
+            : null;
+      const minY = band ? band.minY + 8 : 42;
+      const maxY = band ? band.maxY - 8 : height - 42;
+      const minX = band ? band.minX : 42;
+      const maxX = band ? band.maxX : width - 42;
+      d.x = clamp(event.x, minX, maxX);
+      d.y = clamp(event.y, minY, maxY);
       const dx = d.x - prevX;
       const dy = d.y - prevY;
 
-      const artifactId = d.entity?.id;
+      const artifactId = d.nodeKind === "artifact" ? d.entity?.id : null;
       if (artifactId) {
         nodes.forEach((node) => {
           if (node.nodeKind === "descriptor" && node.parentArtifactId === artifactId) {
-            node.x = Math.max(42, Math.min(width - 42, node.x + dx));
-            node.y = Math.max(42, Math.min(height - 42, node.y + dy));
+            node.x = clamp(node.x + dx, descriptorBand.minX, descriptorBand.maxX);
+            node.y = clamp(node.y + dy, descriptorBand.minY + 8, descriptorBand.maxY - 8);
           }
         });
       }
@@ -1236,12 +1290,25 @@ function renderPaperFocusedGraph(svg, item) {
       edgeRenderer.updatePositions();
     })
     .on("end", (event, d) => {
-      const artifactId = d.entity?.id;
-      if (!artifactId) return;
-      state.library.graphPositions[`artifact:${artifactId}`] = { x: d.x, y: d.y };
+      if (d.nodeKind === "artifact") {
+        const artifactId = d.entity?.id;
+        if (!artifactId) return;
+        state.library.graphPositions[`artifact:${artifactId}`] = { x: d.x, y: d.y };
+        nodes.forEach((node) => {
+          if (node.nodeKind === "descriptor" && node.parentArtifactId === artifactId) {
+            state.library.graphPositions[node.id] = { x: node.x, y: node.y };
+          }
+        });
+        return;
+      }
+      if (d.nodeKind === "descriptor") {
+        state.library.graphPositions[d.id] = { x: d.x, y: d.y };
+      }
     });
 
-  nodeSelection.filter((d) => d.nodeKind === "artifact").call(artifactDrag);
+  nodeSelection
+    .filter((d) => d.nodeKind === "artifact" || d.nodeKind === "descriptor")
+    .call(movableDrag);
 
   nodeSelection.on("click", (event, d) => {
     if (event.defaultPrevented) return;
@@ -1294,12 +1361,24 @@ function renderPaperFocusedGraph(svg, item) {
   ];
   legendRows.forEach((row, idx) => {
     const y = idx * 18;
-    legend
-      .append("circle")
-      .attr("class", `graph-node ${row.cls}`)
-      .attr("cx", 8)
-      .attr("cy", y + 4)
-      .attr("r", 5);
+    if (row.cls === "graph-node-arg-class") {
+      legend
+        .append("rect")
+        .attr("class", `graph-node ${row.cls}`)
+        .attr("x", 0)
+        .attr("y", y - 2)
+        .attr("width", 14)
+        .attr("height", 10)
+        .attr("rx", 3)
+        .attr("ry", 3);
+    } else {
+      legend
+        .append("circle")
+        .attr("class", `graph-node ${row.cls}`)
+        .attr("cx", 7)
+        .attr("cy", y + 3)
+        .attr("r", 5);
+    }
     legend
       .append("text")
       .attr("class", "graph-legend-label")

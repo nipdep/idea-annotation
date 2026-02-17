@@ -271,8 +271,8 @@ body {
 }
 
 .graph-node-descriptor {
-  fill: #ede3f7;
-  stroke: #74639c;
+  fill: #f6e7da;
+  stroke: #b47b4c;
 }
 
 .graph-node.empty {
@@ -314,7 +314,7 @@ body {
 }
 
 .graph-edge-artifact-descriptor {
-  stroke: #7a6b98;
+  stroke: #ad7a52;
   stroke-dasharray: 3 3;
 }
 
@@ -333,8 +333,8 @@ body {
 }
 
 .graph-layer-band-descriptors {
-  fill: #f2edf8;
-  stroke: #dad0ea;
+  fill: #f8eee4;
+  stroke: #dfc4ac;
 }
 
 .graph-layer-label {
