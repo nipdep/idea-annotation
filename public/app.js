@@ -2111,6 +2111,36 @@ function consumeHighlights(ids) {
   updateDescription("argument");
 }
 
+function normalizeSourceRefValue(value, fallback = "") {
+  if (value == null) return fallback;
+  return String(value).trim();
+}
+
+function removeHighlightsForSourceRefs(target, sourceRefs) {
+  if (!Array.isArray(sourceRefs) || sourceRefs.length === 0) return;
+
+  const pool = state.highlights.filter((hl) => {
+    const sameTarget = (hl.target || "") === target;
+    return sameTarget;
+  });
+  if (!pool.length) return;
+
+  const consumedIds = [];
+  sourceRefs.forEach((ref) => {
+    const section = normalizeSourceRefValue(ref?.section, "Body");
+    const page = normalizeSourceRefValue(ref?.page, "");
+    const match = pool.find((hl) => {
+      if (consumedIds.includes(hl.id)) return false;
+      const hlSection = normalizeSourceRefValue(hl.section, "Body");
+      const hlPage = normalizeSourceRefValue(hl.page, "");
+      return hlSection === section && hlPage === page;
+    });
+    if (match) consumedIds.push(match.id);
+  });
+
+  consumedIds.forEach((id) => removeHighlight(id));
+}
+
 function renderConceptList() {
   const list = el("conceptList");
   list.innerHTML = "";
@@ -2140,6 +2170,7 @@ function renderConceptList() {
     remove.className = "ghost";
     remove.textContent = "Delete";
     remove.addEventListener("click", () => {
+      removeHighlightsForSourceRefs("concept", concept.source_refs || []);
       state.annotations.concepts = state.annotations.concepts.filter((c) => c.concept_id !== concept.concept_id);
       if (state.editing.conceptId === concept.concept_id) {
         state.editing.conceptId = null;
@@ -2185,6 +2216,7 @@ function renderArgumentList() {
     remove.className = "ghost";
     remove.textContent = "Delete";
     remove.addEventListener("click", () => {
+      removeHighlightsForSourceRefs("argument", argument.source_refs || []);
       state.annotations.arguments = state.annotations.arguments.filter((a) => a.argument_id !== argument.argument_id);
       if (state.editing.argumentId === argument.argument_id) {
         state.editing.argumentId = null;
@@ -2228,6 +2260,7 @@ function renderDescriptorList() {
     remove.className = "ghost";
     remove.textContent = "Delete";
     remove.addEventListener("click", () => {
+      removeHighlightsForSourceRefs("descriptor", descriptor.source_refs || []);
       state.annotations.descriptors = state.annotations.descriptors.filter(
         (d) => d.descriptor_id !== descriptor.descriptor_id
       );

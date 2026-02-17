@@ -999,7 +999,8 @@ mark.used {
 }
 
 #highlightPicker,
-#highlightPickerArgument {
+#highlightPickerArgument,
+#highlightPickerDescriptor {
   display: flex;
   flex-direction: column;
   gap: 8px;
