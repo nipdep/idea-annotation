@@ -464,6 +464,43 @@ function normalizeArgType(value) {
   return String(value || "").toLowerCase();
 }
 
+const argumentClassNames = [
+  "Issue",
+  "Idea",
+  "Approach",
+  "Evidence",
+  "Claim",
+  "Warrant",
+  "Backing",
+  "Qualifier",
+  "Rebuttal",
+];
+
+const argumentClassRelations = [
+  { source: "Idea", target: "Issue", label: "resolves" },
+  { source: "Idea", target: "Approach", label: "realizes" },
+  { source: "Approach", target: "Evidence", label: "generates" },
+  { source: "Evidence", target: "Claim", label: "supports" },
+  { source: "Claim", target: "Warrant", label: "warrants" },
+  { source: "Claim", target: "Backing", label: "backs" },
+  { source: "Claim", target: "Qualifier", label: "qualifies" },
+  { source: "Claim", target: "Rebuttal", label: "rebuts" },
+];
+
+function mapArgumentToClass(argType) {
+  const type = normalizeArgType(argType);
+  if (type === "issue") return "Issue";
+  if (type === "idea") return "Idea";
+  if (type === "approach") return "Approach";
+  if (type === "claim" || type === "central argument") return "Claim";
+  if (type === "warrant") return "Warrant";
+  if (type === "backing") return "Backing";
+  if (type === "qualifier") return "Qualifier";
+  if (type === "rebuttal") return "Rebuttal";
+  if (type === "evidence" || type === "result" || type.startsWith("experiment")) return "Evidence";
+  return null;
+}
+
 function activateAnnotationTab(tabName) {
   document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
   document.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
@@ -763,131 +800,99 @@ function renderLibraryGraph() {
   });
 }
 
-function buildArgumentGroups(item) {
-  const groups = {
-    Argument: [],
-    Idea: [],
-    Issue: [],
-    Backing: [],
-    Approach: [],
-    Evidence: [],
-    Claim: [],
-    Warrant: [],
-    Assumption: [],
-    Artifact: [],
-  };
+function layoutNodesInLayer(items, width, minX, maxX, startY, rowGap, maxCols) {
+  if (!items.length) return [];
+  const cols = Math.min(maxCols, items.length);
+  const rows = Math.ceil(items.length / cols);
+  const nodes = [];
+  const xStep = cols > 1 ? (maxX - minX) / (cols - 1) : 0;
+  const baseY = startY - ((rows - 1) * rowGap) / 2;
 
-  (item.arguments || []).forEach((arg) => {
-    const type = normalizeArgType(arg.arg_type);
-    const entry = { kind: "argument", id: arg.argument_id, label: arg.argument_id, data: arg };
-    if (type === "idea") groups.Idea.push(entry);
-    else if (type === "issue") groups.Issue.push(entry);
-    else if (type === "backing") groups.Backing.push(entry);
-    else if (type === "approach") groups.Approach.push(entry);
-    else if (type === "claim" || type === "central argument") groups.Claim.push(entry);
-    else if (type === "warrant") groups.Warrant.push(entry);
-    else if (type === "evidence" || type === "result" || type.startsWith("experiment")) groups.Evidence.push(entry);
+  items.forEach((item, idx) => {
+    const row = Math.floor(idx / cols);
+    const col = idx % cols;
+    nodes.push({
+      ...item,
+      x: cols === 1 ? (minX + maxX) / 2 : minX + xStep * col,
+      y: baseY + row * rowGap,
+    });
   });
-
-  (item.concepts || []).forEach((concept) => {
-    const type = String(concept.type || "").toLowerCase();
-    const entry = { kind: "concept", id: concept.concept_id, label: concept.concept_id, data: concept };
-    if (type.includes("assumption")) groups.Assumption.push(entry);
-    if (type.includes("artifact")) groups.Artifact.push(entry);
-  });
-
-  return groups;
+  return nodes;
 }
 
-function renderPaperFocusedGraph(svg, item) {
-  const width = 800;
-  const height = 520;
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+function buildLayeredGraphData(item) {
+  const argumentByClass = Object.fromEntries(argumentClassNames.map((name) => [name, []]));
 
-  const groups = buildArgumentGroups(item);
-  const positionCache = state.library.graphPositions;
-
-  const nodes = [
-    { id: "Work", label: "Work", type: "paper", r: 22, fx: 520, fy: 70 },
-    { id: "Argument", label: "Argument", type: "class", r: 20, fx: 500, fy: 150 },
-    { id: "Idea", label: "Idea", type: "class", r: 18, fx: 200, fy: 170 },
-    { id: "Issue", label: "Issue", type: "class", r: 18, fx: 220, fy: 270 },
-    { id: "Backing", label: "Backing", type: "class", r: 16, fx: 320, fy: 340 },
-    { id: "Approach", label: "Approach", type: "class", r: 18, fx: 440, fy: 380 },
-    { id: "Artifact", label: "Artifact", type: "class", r: 14, fx: 360, fy: 470 },
-    { id: "Assumption", label: "Assumption", type: "class", r: 14, fx: 520, fy: 470 },
-    { id: "Evidence", label: "Evidence", type: "class", r: 16, fx: 600, fy: 360 },
-    { id: "Claim", label: "Claim", type: "class", r: 16, fx: 660, fy: 300 },
-    { id: "Warrant", label: "Warrant", type: "class", r: 16, fx: 660, fy: 190 },
-  ];
-
-  nodes.forEach((node) => {
-    if (node.fx != null && node.x == null) {
-      node.x = node.fx;
-      node.y = node.fy;
-    }
-  });
-
-  const links = [
-    { source: "Work", target: "Argument", label: "contains", distance: 90 },
-    { source: "Argument", target: "Idea", label: "proposesIdea", distance: 140 },
-    { source: "Argument", target: "Issue", label: "concernsIssue", distance: 140 },
-    { source: "Idea", target: "Issue", label: "responseTo", distance: 140 },
-    { source: "Argument", target: "Backing", label: "hasBacking", distance: 160 },
-    { source: "Argument", target: "Approach", label: "realizes", distance: 120 },
-    { source: "Argument", target: "Evidence", label: "hasEvidence", distance: 150 },
-    { source: "Approach", target: "Evidence", label: "generates", distance: 120 },
-    { source: "Argument", target: "Claim", label: "hasClaim", distance: 150 },
-    { source: "Evidence", target: "Claim", label: "proves", distance: 120 },
-    { source: "Argument", target: "Warrant", label: "hasWarrant", distance: 150 },
-    { source: "Warrant", target: "Claim", label: "leadTo", distance: 120 },
-    { source: "Approach", target: "Assumption", label: "hasAssumption", distance: 120 },
-    { source: "Approach", target: "Artifact", label: "uses", distance: 120 },
-    { source: "Approach", target: "Artifact", label: "introduce", distance: 120 },
-  ];
-
-  nodes.forEach((node) => {
-    const instances = groups[node.id] || [];
-    if (!instances.length || !state.library.expanded.has(node.id)) return;
-    const parent = nodes.find((n) => n.id === node.id);
-    instances.forEach((inst, idx) => {
-      const angle = (2 * Math.PI * idx) / Math.max(instances.length, 1);
-      const radius = 26;
-      const offsetX = radius * Math.cos(angle);
-      const offsetY = radius * Math.sin(angle);
-      nodes.push({
-        id: `${node.id}:${inst.id}`,
-        label: inst.label,
-        type: "instance",
-        r: 12,
-        parent: node.id,
-        parentRef: parent,
-        instance: inst,
-        offsetX,
-        offsetY,
-        x: parent ? parent.fx + offsetX : undefined,
-        y: parent ? parent.fy + offsetY : undefined,
-        fx: parent ? parent.fx + offsetX : undefined,
-        fy: parent ? parent.fy + offsetY : undefined,
-      });
-      links.push({
-        source: node.id,
-        target: `${node.id}:${inst.id}`,
-        label: "",
-        distance: 30,
-      });
+  (item.arguments || []).forEach((arg) => {
+    const className = mapArgumentToClass(arg.arg_type);
+    if (!className) return;
+    argumentByClass[className].push({
+      kind: "argument",
+      id: arg.argument_id,
+      data: arg,
     });
   });
 
-  nodes.forEach((node) => {
-    if (node.type === "instance") return;
-    const cached = positionCache[node.id];
-    if (cached) {
-      node.x = cached.x;
-      node.y = cached.y;
+  const artifacts = (item.concepts || []).map((concept) => ({
+    kind: "concept",
+    id: concept.concept_id,
+    data: concept,
+  }));
+
+  const descriptors = (item.descriptors || []).map((descriptor) => ({
+    kind: "descriptor",
+    id: descriptor.descriptor_id,
+    data: descriptor,
+  }));
+
+  return { argumentByClass, artifacts, descriptors };
+}
+
+function drawGraphEdges(svgSel, edges, nodeMap) {
+  const edgeGroup = svgSel.append("g");
+  const labelGroup = svgSel.append("g");
+
+  edges.forEach((edge) => {
+    const source = nodeMap.get(edge.source);
+    const target = nodeMap.get(edge.target);
+    if (!source || !target) return;
+
+    const dx = target.x - source.x;
+    const dy = target.y - source.y;
+    const length = Math.hypot(dx, dy) || 1;
+    const x1 = source.x + (dx / length) * (source.r || 0);
+    const y1 = source.y + (dy / length) * (source.r || 0);
+    const x2 = target.x - (dx / length) * ((target.r || 0) + 4);
+    const y2 = target.y - (dy / length) * ((target.r || 0) + 4);
+
+    edgeGroup
+      .append("line")
+      .attr("x1", x1)
+      .attr("y1", y1)
+      .attr("x2", x2)
+      .attr("y2", y2)
+      .attr("stroke", "#d0c6bd")
+      .attr("stroke-width", edge.weight || 1.2)
+      .attr("marker-end", edge.directed ? "url(#arrowhead)" : null);
+
+    if (edge.label) {
+      labelGroup
+        .append("text")
+        .attr("x", (x1 + x2) / 2)
+        .attr("y", (y1 + y2) / 2 - 6)
+        .attr("text-anchor", "middle")
+        .attr("class", "graph-edge-label")
+        .text(edge.label);
     }
   });
+}
 
+function renderPaperFocusedGraph(svg, item) {
+  const width = 860;
+  const height = 560;
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+  const { argumentByClass, artifacts, descriptors } = buildLayeredGraphData(item);
   const svgSel = window.d3.select(svg);
   svgSel.selectAll("*").remove();
 
@@ -913,7 +918,7 @@ function renderPaperFocusedGraph(svg, item) {
     .attr("y", 28)
     .attr("fill", "#1e1b16")
     .attr("font-size", "14")
-    .text((item.metadata?.title || "Selected Paper").slice(0, 80));
+    .text((item.metadata?.title || "Selected Paper").slice(0, 95));
 
   svgSel
     .append("text")
@@ -921,252 +926,253 @@ function renderPaperFocusedGraph(svg, item) {
     .attr("y", 46)
     .attr("fill", "#6b6157")
     .attr("font-size", "11")
-    .text("Click background to return to paper graph");
+    .text("Top: Arguments | Middle: Artifacts | Bottom: Descriptors");
 
   const defs = svgSel.append("defs");
   defs
     .append("marker")
     .attr("id", "arrowhead")
     .attr("viewBox", "0 -5 10 10")
-    .attr("refX", 10)
+    .attr("refX", 9)
     .attr("refY", 0)
     .attr("markerWidth", 6)
     .attr("markerHeight", 6)
     .attr("orient", "auto")
-    .attr("markerUnits", "userSpaceOnUse")
     .append("path")
     .attr("d", "M0,-5L10,0L0,5")
     .attr("fill", "#d0c6bd");
 
-  const link = svgSel
-    .append("g")
-    .attr("stroke", "#d0c6bd")
-    .selectAll("line")
-    .data(links)
-    .join("line")
-    .attr("stroke-width", 1.2)
-    .attr("marker-end", "url(#arrowhead)");
+  const classNodes = layoutNodesInLayer(
+    argumentClassNames.map((name) => ({
+      id: `class:${name}`,
+      label: name,
+      nodeKind: "argument-class",
+      className: name,
+      r: 16,
+      hasInstances: (argumentByClass[name] || []).length > 0,
+    })),
+    width,
+    70,
+    width - 70,
+    110,
+    0,
+    argumentClassNames.length
+  );
 
-  const linkLabel = svgSel
-    .append("g")
-    .selectAll("text")
-    .data(links.filter((l) => l.label))
-    .join("text")
-    .attr("class", "graph-edge-label")
-    .text((d) => d.label);
+  const artifactNodes = layoutNodesInLayer(
+    artifacts.map((artifact) => ({
+      id: `artifact:${artifact.id}`,
+      label: artifact.data?.label || artifact.id,
+      nodeKind: "artifact",
+      entity: artifact,
+      r: 14,
+    })),
+    width,
+    90,
+    width - 90,
+    300,
+    54,
+    6
+  );
 
-  const node = svgSel
+  const nodeMap = new Map();
+  [...classNodes, ...artifactNodes].forEach((node) => nodeMap.set(node.id, node));
+
+  const edges = [];
+  argumentClassRelations.forEach((rel) => {
+    edges.push({
+      source: `class:${rel.source}`,
+      target: `class:${rel.target}`,
+      label: rel.label,
+      directed: true,
+      type: "class-relation",
+    });
+  });
+
+  const expandedClassKeys = new Set(
+    [...state.library.expanded].filter((key) => key.startsWith("arg:"))
+  );
+  expandedClassKeys.forEach((key) => {
+    const className = key.slice(4);
+    const classNode = nodeMap.get(`class:${className}`);
+    const instances = argumentByClass[className] || [];
+    if (!classNode || !instances.length) return;
+
+    const instanceNodes = layoutNodesInLayer(
+      instances.map((inst) => ({
+        id: `argument:${inst.id}`,
+        label: inst.id,
+        nodeKind: "argument",
+        entity: inst,
+        r: 11,
+      })),
+      width,
+      Math.max(70, classNode.x - 75),
+      Math.min(width - 70, classNode.x + 75),
+      classNode.y + 70,
+      28,
+      3
+    );
+
+    instanceNodes.forEach((instNode) => {
+      nodeMap.set(instNode.id, instNode);
+      edges.push({
+        source: classNode.id,
+        target: instNode.id,
+        label: "",
+        directed: false,
+        type: "class-instance",
+        weight: 1,
+      });
+
+      const conceptRefs = instNode.entity?.data?.concept_refs || [];
+      conceptRefs.forEach((conceptId) => {
+        const artifactNodeId = `artifact:${conceptId}`;
+        if (!nodeMap.has(artifactNodeId)) return;
+        edges.push({
+          source: instNode.id,
+          target: artifactNodeId,
+          label: "about",
+          directed: true,
+          type: "about",
+          weight: 1,
+        });
+      });
+    });
+  });
+
+  const expandedArtifactKeys = new Set(
+    [...state.library.expanded].filter((key) => key.startsWith("artifact:"))
+  );
+  expandedArtifactKeys.forEach((key) => {
+    const artifactId = key.slice("artifact:".length);
+    const artifactNode = nodeMap.get(`artifact:${artifactId}`);
+    if (!artifactNode) return;
+    const relatedDescriptors = descriptors.filter((descriptor) =>
+      (descriptor.data?.concept_refs || []).includes(artifactId)
+    );
+    if (!relatedDescriptors.length) return;
+
+    const descriptorNodes = layoutNodesInLayer(
+      relatedDescriptors.map((descriptor) => ({
+        id: `descriptor:${descriptor.id}:for:${artifactId}`,
+        label: formatTypeLabel(descriptor.data?.descriptor_type || "descriptor"),
+        nodeKind: "descriptor",
+        entity: descriptor,
+        r: 11,
+      })),
+      width,
+      Math.max(70, artifactNode.x - 78),
+      Math.min(width - 70, artifactNode.x + 78),
+      Math.min(height - 40, artifactNode.y + 118),
+      24,
+      3
+    );
+
+    descriptorNodes.forEach((descNode) => {
+      nodeMap.set(descNode.id, descNode);
+      edges.push({
+        source: artifactNode.id,
+        target: descNode.id,
+        label: "",
+        directed: true,
+        type: "artifact-descriptor",
+        weight: 1,
+      });
+    });
+  });
+
+  drawGraphEdges(svgSel, edges, nodeMap);
+
+  const nodes = [...nodeMap.values()];
+  const nodeSelection = svgSel
     .append("g")
     .selectAll("g")
     .data(nodes)
     .join("g")
-    .style("cursor", (d) => (d.type === "class" || d.type === "instance" ? "pointer" : "default"))
-    .call(
-      window.d3
-        .drag()
-        .on("start", (event, d) => {
-          if (!event.active) simulation.alphaTarget(0.3).restart();
-          d.fx = d.x;
-          d.fy = d.y;
-        })
-        .on("drag", (event, d) => {
-          d.fx = event.x;
-          d.fy = event.y;
-        })
-        .on("end", (event, d) => {
-          if (!event.active) simulation.alphaTarget(0);
-          if (d.type !== "paper" && d.type !== "class" && d.type !== "instance") {
-            d.fx = null;
-            d.fy = null;
-          }
-        })
-    );
+    .style("cursor", "pointer")
+    .attr("transform", (d) => `translate(${d.x}, ${d.y})`);
 
-  node.on("click", (event, d) => {
-    event.stopPropagation();
-    if (d.type === "instance") {
-      state.library.selectedInstance = { kind: d.instance.kind, id: d.instance.id };
-      renderLibraryDetail();
-      renderLibraryGraph();
-      return;
-    }
-    if (d.type === "class") {
-      toggleGraphGroup(d.id);
-    }
-  });
-
-  node
+  nodeSelection
     .append("circle")
     .attr("r", (d) => d.r)
     .attr("class", (d) => {
-      if (d.type === "paper") return "graph-node paper-node";
-      if (d.type === "instance") return "graph-node small-node";
-      const hasInstances = (groups[d.id] || []).length > 0;
-      return `graph-node${hasInstances ? "" : " empty"}${state.library.expanded.has(d.id) ? " active" : ""}`;
+      const isActiveClass =
+        d.nodeKind === "argument-class" && state.library.expanded.has(`arg:${d.className}`);
+      const isActiveArtifact =
+        d.nodeKind === "artifact" && state.library.expanded.has(`artifact:${d.entity.id}`);
+      const isSelected =
+        (d.nodeKind === "argument-class" &&
+          state.library.selectedInstance?.kind === "argumentClass" &&
+          state.library.selectedInstance?.id === d.className) ||
+        (d.nodeKind === "argument" &&
+          state.library.selectedInstance?.kind === "argument" &&
+          state.library.selectedInstance?.id === d.entity.id) ||
+        (d.nodeKind === "artifact" &&
+          state.library.selectedInstance?.kind === "concept" &&
+          state.library.selectedInstance?.id === d.entity.id) ||
+        (d.nodeKind === "descriptor" &&
+          state.library.selectedInstance?.kind === "descriptor" &&
+          state.library.selectedInstance?.id === d.entity.id);
+
+      const emptyClass = d.nodeKind === "argument-class" && !d.hasInstances;
+      return `graph-node${d.nodeKind === "argument" || d.nodeKind === "descriptor" ? " small-node" : ""}${
+        emptyClass ? " empty" : ""
+      }${isActiveClass || isActiveArtifact || isSelected ? " active" : ""}`;
     });
 
-  node
+  nodeSelection
     .append("text")
     .attr("class", "graph-label")
     .attr("text-anchor", "middle")
     .attr("dy", 4)
-    .text((d) => d.label);
-
-  const simulation = window.d3
-    .forceSimulation(nodes)
-    .force(
-      "link",
-      window.d3.forceLink(links).id((d) => d.id).distance((d) => d.distance || 120)
-    )
-    .force(
-      "charge",
-      window.d3.forceManyBody().strength((d) => (d.type === "instance" ? 0 : -180))
-    )
-    .force("instance-link", window.d3.forceLink(links.filter((l) => l.label === "")).id((d) => d.id).distance(35).strength(0.9))
-    .force("center", window.d3.forceCenter(width / 2, height / 2))
-    .force("collision", window.d3.forceCollide().radius((d) => d.r + 6))
-    .alpha(0.2)
-    .alphaDecay(0.2)
-    .on("tick", () => {
-      nodes.forEach((d) => {
-        if (d.type !== "instance" || !d.parentRef) return;
-        const parentX = d.parentRef.x ?? d.parentRef.fx ?? d.x;
-        const parentY = d.parentRef.y ?? d.parentRef.fy ?? d.y;
-        d.fx = parentX + d.offsetX;
-        d.fy = parentY + d.offsetY;
-        d.x = d.fx;
-        d.y = d.fy;
-      });
-      link
-        .attr("x1", (d) => {
-          const r = d.source.r || 0;
-          const dx = d.target.x - d.source.x;
-          const dy = d.target.y - d.source.y;
-          const len = Math.hypot(dx, dy) || 1;
-          return d.source.x + (dx / len) * r;
-        })
-        .attr("y1", (d) => {
-          const r = d.source.r || 0;
-          const dx = d.target.x - d.source.x;
-          const dy = d.target.y - d.source.y;
-          const len = Math.hypot(dx, dy) || 1;
-          return d.source.y + (dy / len) * r;
-        })
-        .attr("x2", (d) => {
-          const r = d.target.r || 0;
-          const dx = d.target.x - d.source.x;
-          const dy = d.target.y - d.source.y;
-          const len = Math.hypot(dx, dy) || 1;
-          return d.target.x - (dx / len) * (r + 4);
-        })
-        .attr("y2", (d) => {
-          const r = d.target.r || 0;
-          const dx = d.target.x - d.source.x;
-          const dy = d.target.y - d.source.y;
-          const len = Math.hypot(dx, dy) || 1;
-          return d.target.y - (dy / len) * (r + 4);
-        });
-
-      linkLabel
-        .attr("x", (d) => (d.source.x + d.target.x) / 2)
-        .attr("y", (d) => (d.source.y + d.target.y) / 2 - 6);
-
-      node.attr("transform", (d) => `translate(${d.x}, ${d.y})`);
-
-      nodes.forEach((d) => {
-        d.x = Math.max(40, Math.min(width - 40, d.x));
-        d.y = Math.max(40, Math.min(height - 40, d.y));
-        if (d.type !== "instance") {
-          positionCache[d.id] = { x: d.x, y: d.y };
-        }
-      });
+    .style("pointer-events", "none")
+    .text((d) => {
+      if (d.nodeKind === "artifact") return d.label.slice(0, 20);
+      if (d.nodeKind === "descriptor") return d.label.slice(0, 16);
+      return d.label;
     });
-}
 
-function drawNode(svg, x, y, label, className, onClick) {
-  const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-  const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-  circle.setAttribute("cx", x);
-  circle.setAttribute("cy", y);
-  circle.setAttribute("r", className.includes("small-node") ? "16" : "20");
-  circle.setAttribute("class", className);
-  if (onClick) {
-    circle.addEventListener("click", (event) => {
-      event.stopPropagation();
-      onClick();
-    });
-  }
-
-  const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-  text.setAttribute("x", x);
-  text.setAttribute("y", y + 4);
-  text.setAttribute("text-anchor", "middle");
-  text.setAttribute("class", "graph-label");
-  text.textContent = label;
-
-  group.appendChild(circle);
-  group.appendChild(text);
-  svg.appendChild(group);
-}
-
-function drawEdge(svg, x1, y1, x2, y2, label, offset = -6) {
-  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-  line.setAttribute("x1", x1);
-  line.setAttribute("y1", y1);
-  line.setAttribute("x2", x2);
-  line.setAttribute("y2", y2);
-  line.setAttribute("stroke", "#d0c6bd");
-  line.setAttribute("stroke-width", "1.2");
-  svg.appendChild(line);
-
-  if (label) {
-    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    text.setAttribute("x", (x1 + x2) / 2);
-    text.setAttribute("y", (y1 + y2) / 2 + offset);
-    text.setAttribute("text-anchor", "middle");
-    text.setAttribute("class", "graph-edge-label");
-    text.textContent = label;
-    svg.appendChild(text);
-  }
-}
-
-function toggleGraphGroup(groupId) {
-  if (state.library.expanded.has(groupId)) {
-    state.library.expanded.delete(groupId);
-    if (state.library.selectedInstance) {
-      const current = state.library.selectedInstance.id;
-      const isInGroup = (buildArgumentGroups(state.library.filtered.find((item) => item.paper_id === state.library.selectedId))[
-        groupId
-      ] || []).some((inst) => inst.id === current);
-      if (isInGroup) {
-        state.library.selectedInstance = null;
+  nodeSelection.on("click", (event, d) => {
+    event.stopPropagation();
+    if (d.nodeKind === "argument-class") {
+      const key = `arg:${d.className}`;
+      if (state.library.expanded.has(key)) {
+        state.library.expanded.delete(key);
+      } else {
+        state.library.expanded.add(key);
       }
-    }
-  } else {
-    state.library.expanded.add(groupId);
-  }
-  renderLibraryGraph();
-  renderLibraryDetail();
-}
-
-function renderInstanceNodes(svg, parentNode, instances) {
-  if (!instances.length) return;
-  const radius = 45;
-  instances.forEach((inst, idx) => {
-    const angle = (2 * Math.PI * idx) / instances.length;
-    const x = parentNode.x + radius * Math.cos(angle);
-    const y = parentNode.y + radius * Math.sin(angle);
-    const isSelected =
-      state.library.selectedInstance?.id === inst.id &&
-      state.library.selectedInstance?.kind === inst.kind;
-
-    const nodeClass = `graph-node small-node${isSelected ? " active" : ""}`;
-    drawNode(svg, x, y, inst.label, nodeClass, () => {
-      state.library.selectedInstance = { kind: inst.kind, id: inst.id };
-      renderLibraryDetail();
+      state.library.selectedInstance = { kind: "argumentClass", id: d.className };
       renderLibraryGraph();
-    });
-    drawEdge(svg, parentNode.x, parentNode.y, x, y);
+      renderLibraryDetail();
+      return;
+    }
+
+    if (d.nodeKind === "argument") {
+      state.library.selectedInstance = { kind: "argument", id: d.entity.id };
+      renderLibraryGraph();
+      renderLibraryDetail();
+      return;
+    }
+
+    if (d.nodeKind === "artifact") {
+      const key = `artifact:${d.entity.id}`;
+      if (state.library.expanded.has(key)) {
+        state.library.expanded.delete(key);
+      } else {
+        state.library.expanded.add(key);
+      }
+      state.library.selectedInstance = { kind: "concept", id: d.entity.id };
+      renderLibraryGraph();
+      renderLibraryDetail();
+      return;
+    }
+
+    if (d.nodeKind === "descriptor") {
+      state.library.selectedInstance = { kind: "descriptor", id: d.entity.id };
+      renderLibraryGraph();
+      renderLibraryDetail();
+    }
   });
 }
 
@@ -1188,12 +1194,44 @@ function renderLibraryDetail() {
     block.innerHTML = `<div class="subhead">Selected Node</div>`;
     const info = document.createElement("div");
     info.className = "stack";
-    if (inst.kind === "argument") {
+    if (inst.kind === "argumentClass") {
+      const className = String(inst.id || "");
+      const matching = (selected.arguments || []).filter(
+        (arg) => mapArgumentToClass(arg.arg_type) === className
+      );
+
+      const header = document.createElement("div");
+      header.innerHTML = `<strong>${className}</strong>`;
+      info.appendChild(header);
+
+      const count = document.createElement("div");
+      count.className = "meta";
+      count.textContent = `Instances: ${matching.length}`;
+      info.appendChild(count);
+
+      if (matching.length) {
+        const list = document.createElement("div");
+        list.className = "list";
+        matching.forEach((arg) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "concept-ref-link";
+          button.textContent = `${arg.argument_id} ${arg.text ? `- ${arg.text.slice(0, 50)}` : ""}`;
+          button.addEventListener("click", () => {
+            state.library.selectedInstance = { kind: "argument", id: arg.argument_id };
+            renderLibraryDetail();
+            renderLibraryGraph();
+          });
+          list.appendChild(button);
+        });
+        info.appendChild(list);
+      }
+    } else if (inst.kind === "argument") {
       const arg = (selected.arguments || []).find((a) => a.argument_id === inst.id);
       if (arg) {
         const conceptRefs = Array.isArray(arg.concept_refs) ? arg.concept_refs : [];
         const fields = [
-          { label: "Class", value: formatTypeLabel(arg.arg_type || "") },
+          { label: "Class", value: mapArgumentToClass(arg.arg_type) || formatTypeLabel(arg.arg_type || "") },
           { label: "Label", value: arg.text || "-" },
           { label: "Description", value: arg.description || "-" },
           {
@@ -1306,6 +1344,61 @@ function renderLibraryDetail() {
         `;
         info.appendChild(updated);
         info.appendChild(annotator);
+      }
+    } else if (inst.kind === "descriptor") {
+      const descriptor = (selected.descriptors || []).find((d) => d.descriptor_id === inst.id);
+      if (descriptor) {
+        const fields = [
+          { label: "Class", value: formatTypeLabel(descriptor.descriptor_type || "") },
+          { label: "Label", value: descriptor.descriptor_id || "-" },
+          {
+            label: "Source refs",
+            value: Array.isArray(descriptor.source_refs) && descriptor.source_refs.length
+              ? descriptor.source_refs.map((ref) => ref.section || "Section").join(", ")
+              : "",
+          },
+        ];
+
+        const header = document.createElement("div");
+        header.innerHTML = `<strong>${descriptor.descriptor_id}</strong>`;
+        info.appendChild(header);
+
+        fields.forEach((field) => {
+          if (!field.value) return;
+          const label = document.createElement("div");
+          label.innerHTML = `<strong>${field.label}</strong>`;
+          const value = document.createElement("div");
+          value.className = "meta";
+          value.textContent = field.value;
+          info.appendChild(label);
+          info.appendChild(value);
+        });
+
+        const conceptRefs = Array.isArray(descriptor.concept_refs) ? descriptor.concept_refs : [];
+        if (conceptRefs.length) {
+          const refsLabel = document.createElement("div");
+          refsLabel.innerHTML = "<strong>Artifact refs</strong>";
+          info.appendChild(refsLabel);
+
+          const refsWrap = document.createElement("div");
+          refsWrap.className = "meta concept-ref-links";
+          conceptRefs.forEach((conceptId) => {
+            const concept = (selected.concepts || []).find((c) => c.concept_id === conceptId);
+            const refBtn = document.createElement("button");
+            refBtn.type = "button";
+            refBtn.className = "concept-ref-link";
+            refBtn.textContent = concept?.label
+              ? `${conceptId} ${concept.label}`
+              : conceptId;
+            refBtn.addEventListener("click", () => {
+              state.library.selectedInstance = { kind: "concept", id: conceptId };
+              renderLibraryDetail();
+              renderLibraryGraph();
+            });
+            refsWrap.appendChild(refBtn);
+          });
+          info.appendChild(refsWrap);
+        }
       }
     }
     if (!info.innerHTML) {
