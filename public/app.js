@@ -68,6 +68,7 @@ const state = {
     expanded: new Set(),
     selectedInstance: null,
     graphPositions: {},
+    descriptorOffsets: {},
   },
 };
 
@@ -956,8 +957,8 @@ function renderPaperFocusedGraph(svg, item) {
 
   const layerBands = [
     { key: "arguments", y: 72, h: 126, label: "ARGUMENT" },
-    { key: "artifacts", y: 214, h: 188, label: "ARTIFACTS" },
-    { key: "descriptors", y: 418, h: 96, label: "DESCRIPTORS" },
+    { key: "artifacts", y: 214, h: 216, label: "ARTIFACTS" },
+    { key: "descriptors", y: 446, h: 96, label: "DESCRIPTORS" },
   ];
 
   const goBackToPaperGraph = () => {
@@ -1050,6 +1051,9 @@ function renderPaperFocusedGraph(svg, item) {
   const argumentBand = getBandBounds(layerBands, "arguments", 40, 10, width);
   const artifactBand = getBandBounds(layerBands, "artifacts", 44, 16, width);
   const descriptorBand = getBandBounds(layerBands, "descriptors", 36, 14, width);
+  const descriptorOffsets = state.library.descriptorOffsets || (state.library.descriptorOffsets = {});
+  const descriptorYMin = descriptorBand.minY + 8;
+  const descriptorYMax = descriptorBand.maxY - 8;
 
   const classNodes = layoutNodesInBand(
     argumentClassNames.map((name) => ({
@@ -1057,9 +1061,9 @@ function renderPaperFocusedGraph(svg, item) {
       label: name,
       nodeKind: "argument-class",
       className: name,
-      w: 96,
-      h: 44,
-      rx: 13,
+      w: 84,
+      h: 36,
+      rx: 11,
       hasInstances: (argumentByClass[name] || []).length > 0,
     })),
     argumentBand.minX,
@@ -1186,11 +1190,25 @@ function renderPaperFocusedGraph(svg, item) {
     );
 
     descriptorNodes.forEach((descNode) => {
-      const cached = state.library.graphPositions[descNode.id];
-      if (cached) {
-        descNode.x = clamp(cached.x, descriptorBand.minX, descriptorBand.maxX);
-        descNode.y = clamp(cached.y, descriptorBand.minY + 16, descriptorBand.maxY - 14);
+      const storedOffset = descriptorOffsets[descNode.id];
+      if (
+        storedOffset &&
+        Number.isFinite(storedOffset.dx) &&
+        Number.isFinite(storedOffset.dy)
+      ) {
+        descNode.x = clamp(artifactNode.x + storedOffset.dx, descriptorBand.minX, descriptorBand.maxX);
+        descNode.y = clamp(artifactNode.y + storedOffset.dy, descriptorYMin, descriptorYMax);
+      } else {
+        const cached = state.library.graphPositions[descNode.id];
+        if (cached) {
+          descNode.x = clamp(cached.x, descriptorBand.minX, descriptorBand.maxX);
+          descNode.y = clamp(cached.y, descriptorYMin, descriptorYMax);
+        }
       }
+      descriptorOffsets[descNode.id] = {
+        dx: descNode.x - artifactNode.x,
+        dy: descNode.y - artifactNode.y,
+      };
       nodeMap.set(descNode.id, descNode);
       edges.push({
         source: artifactNode.id,
@@ -1248,12 +1266,12 @@ function renderPaperFocusedGraph(svg, item) {
   nodeSelection
     .filter((d) => d.nodeKind === "argument-class")
     .append("rect")
-    .attr("x", (d) => -((d.w || 96) / 2))
-    .attr("y", (d) => -((d.h || 44) / 2))
-    .attr("width", (d) => d.w || 96)
-    .attr("height", (d) => d.h || 44)
-    .attr("rx", (d) => d.rx || 13)
-    .attr("ry", (d) => d.rx || 13)
+    .attr("x", (d) => -((d.w || 84) / 2))
+    .attr("y", (d) => -((d.h || 36) / 2))
+    .attr("width", (d) => d.w || 84)
+    .attr("height", (d) => d.h || 36)
+    .attr("rx", (d) => d.rx || 11)
+    .attr("ry", (d) => d.rx || 11)
     .attr("class", nodeClassName);
 
   nodeSelection
@@ -1301,8 +1319,18 @@ function renderPaperFocusedGraph(svg, item) {
       if (artifactId) {
         nodes.forEach((node) => {
           if (node.nodeKind === "descriptor" && node.parentArtifactId === artifactId) {
-            node.x = clamp(node.x + dx, descriptorBand.minX, descriptorBand.maxX);
-            node.y = clamp(node.y + dy, descriptorBand.minY + 8, descriptorBand.maxY - 8);
+            const offset =
+              descriptorOffsets[node.id] ||
+              {
+                dx: node.x - prevX,
+                dy: node.y - prevY,
+              };
+            node.x = clamp(d.x + offset.dx, descriptorBand.minX, descriptorBand.maxX);
+            node.y = clamp(d.y + offset.dy, descriptorYMin, descriptorYMax);
+            descriptorOffsets[node.id] = {
+              dx: node.x - d.x,
+              dy: node.y - d.y,
+            };
           }
         });
       }
@@ -1318,12 +1346,23 @@ function renderPaperFocusedGraph(svg, item) {
         nodes.forEach((node) => {
           if (node.nodeKind === "descriptor" && node.parentArtifactId === artifactId) {
             state.library.graphPositions[node.id] = { x: node.x, y: node.y };
+            descriptorOffsets[node.id] = {
+              dx: node.x - d.x,
+              dy: node.y - d.y,
+            };
           }
         });
         return;
       }
       if (d.nodeKind === "descriptor") {
         state.library.graphPositions[d.id] = { x: d.x, y: d.y };
+        const artifactNode = nodeMap.get(`artifact:${d.parentArtifactId}`);
+        if (artifactNode) {
+          descriptorOffsets[d.id] = {
+            dx: d.x - artifactNode.x,
+            dy: d.y - artifactNode.y,
+          };
+        }
       }
     });
 
@@ -1374,39 +1413,6 @@ function renderPaperFocusedGraph(svg, item) {
     }
   });
 
-  const legend = svgSel.append("g").attr("class", "graph-legend").attr("transform", `translate(${width - 250}, 20)`);
-  const legendRows = [
-    { cls: "graph-node-arg-class", label: "Argument class" },
-    { cls: "graph-node-artifact", label: "Artifact" },
-    { cls: "graph-node-descriptor", label: "Descriptor type" },
-  ];
-  legendRows.forEach((row, idx) => {
-    const y = idx * 18;
-    if (row.cls === "graph-node-arg-class") {
-      legend
-        .append("rect")
-        .attr("class", `graph-node ${row.cls}`)
-        .attr("x", 0)
-        .attr("y", y - 2)
-        .attr("width", 14)
-        .attr("height", 10)
-        .attr("rx", 3)
-        .attr("ry", 3);
-    } else {
-      legend
-        .append("circle")
-        .attr("class", `graph-node ${row.cls}`)
-        .attr("cx", 7)
-        .attr("cy", y + 3)
-        .attr("r", 5);
-    }
-    legend
-      .append("text")
-      .attr("class", "graph-legend-label")
-      .attr("x", 20)
-      .attr("y", y + 8)
-      .text(row.label);
-  });
 }
 
 function renderLibraryDetail() {
