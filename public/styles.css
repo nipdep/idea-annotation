@@ -200,6 +200,16 @@ body {
 .graph-container {
   width: 100%;
   min-height: 420px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fcfaf6 0%, #f8f3ec 100%);
+  border: 1px solid #e0d6cb;
+  overflow: hidden;
+}
+
+#graphSvg {
+  width: 100%;
+  height: 100%;
+  min-height: 420px;
 }
 
 .library-grid .panel {
@@ -223,14 +233,16 @@ body {
 
 .graph-node {
   cursor: pointer;
-  fill: #f4efe8;
-  stroke: var(--accent-2);
-  stroke-width: 2;
+  fill: #f6f0e8;
+  stroke: #7e6f60;
+  stroke-width: 1.8;
+  transition: fill 0.18s ease, stroke 0.18s ease, transform 0.18s ease;
 }
 
 .graph-node.active {
-  fill: #cfe8e7;
+  fill: #d8eeeb;
   stroke: #1e6b6a;
+  stroke-width: 2.2;
 }
 
 .graph-node.paper-node {
@@ -242,22 +254,98 @@ body {
   stroke-width: 1.5;
 }
 
+.graph-node-arg-class {
+  fill: #f3ece3;
+  stroke: #6c5e51;
+}
+
+.graph-node-artifact {
+  fill: #deefe8;
+  stroke: #2d7f77;
+}
+
+.graph-node-argument {
+  fill: #f8efe2;
+  stroke: #8a6d49;
+}
+
+.graph-node-descriptor {
+  fill: #ede3f7;
+  stroke: #74639c;
+}
+
 .graph-node.empty {
-  fill: #f1efeb;
-  stroke: #d0c6bd;
+  fill: #ece7e1;
+  stroke: #c6bbae;
 }
 
 .graph-label {
   font-size: 12px;
   fill: var(--ink);
+  font-weight: 600;
 }
 
 .graph-edge-label {
   font-size: 10px;
-  fill: #6b6157;
+  fill: #5a524a;
   paint-order: stroke;
-  stroke: #fff;
-  stroke-width: 3px;
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-width: 4px;
+  letter-spacing: 0.01em;
+}
+
+.graph-edge {
+  stroke: #c8bfb4;
+}
+
+.graph-edge-class-relation {
+  stroke: #c1b4a7;
+}
+
+.graph-edge-about {
+  stroke: #3a8f86;
+  stroke-dasharray: 4 3;
+}
+
+.graph-edge-artifact-descriptor {
+  stroke: #7a6b98;
+  stroke-dasharray: 3 3;
+}
+
+.graph-layer-band {
+  pointer-events: none;
+}
+
+.graph-layer-band-arguments {
+  fill: #f7f1ea;
+  stroke: #e4d7c9;
+}
+
+.graph-layer-band-artifacts {
+  fill: #e9f5f1;
+  stroke: #c9e5de;
+}
+
+.graph-layer-band-descriptors {
+  fill: #f2edf8;
+  stroke: #dad0ea;
+}
+
+.graph-layer-label {
+  fill: #6a6057;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.graph-legend-label {
+  fill: #5f554c;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.graph-legend {
+  pointer-events: none;
 }
 
 details {

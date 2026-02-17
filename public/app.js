@@ -867,11 +867,11 @@ function drawGraphEdges(svgSel, edges, nodeMap) {
 
     edgeGroup
       .append("line")
+      .attr("class", `graph-edge graph-edge-${edge.type || "default"}`)
       .attr("x1", x1)
       .attr("y1", y1)
       .attr("x2", x2)
       .attr("y2", y2)
-      .attr("stroke", "#d0c6bd")
       .attr("stroke-width", edge.weight || 1.2)
       .attr("marker-end", edge.directed ? "url(#arrowhead)" : null);
 
@@ -881,7 +881,7 @@ function drawGraphEdges(svgSel, edges, nodeMap) {
         .attr("x", (x1 + x2) / 2)
         .attr("y", (y1 + y2) / 2 - 6)
         .attr("text-anchor", "middle")
-        .attr("class", "graph-edge-label")
+        .attr("class", `graph-edge-label graph-edge-label-${edge.type || "default"}`)
         .text(edge.label);
     }
   });
@@ -895,6 +895,12 @@ function renderPaperFocusedGraph(svg, item) {
   const { argumentByClass, artifacts, descriptors } = buildLayeredGraphData(item);
   const svgSel = window.d3.select(svg);
   svgSel.selectAll("*").remove();
+
+  const layerBands = [
+    { key: "arguments", y: 72, h: 122, label: "ARGUMENT CLASSES" },
+    { key: "artifacts", y: 220, h: 122, label: "ARTIFACTS" },
+    { key: "descriptors", y: 368, h: 164, label: "DESCRIPTORS" },
+  ];
 
   svgSel
     .append("rect")
@@ -927,6 +933,26 @@ function renderPaperFocusedGraph(svg, item) {
     .attr("fill", "#6b6157")
     .attr("font-size", "11")
     .text("Top: Arguments | Middle: Artifacts | Bottom: Descriptors");
+
+  const layerGroup = svgSel.append("g");
+  layerBands.forEach((band) => {
+    layerGroup
+      .append("rect")
+      .attr("class", `graph-layer-band graph-layer-band-${band.key}`)
+      .attr("x", 18)
+      .attr("y", band.y)
+      .attr("rx", 14)
+      .attr("ry", 14)
+      .attr("width", width - 36)
+      .attr("height", band.h);
+
+    layerGroup
+      .append("text")
+      .attr("class", "graph-layer-label")
+      .attr("x", 34)
+      .attr("y", band.y + 18)
+      .text(band.label);
+  });
 
   const defs = svgSel.append("defs");
   defs
@@ -1115,15 +1141,20 @@ function renderPaperFocusedGraph(svg, item) {
           state.library.selectedInstance?.kind === "descriptor" &&
           state.library.selectedInstance?.id === d.entity.id);
 
-      const emptyClass = d.nodeKind === "argument-class" && !d.hasInstances;
-      return `graph-node${d.nodeKind === "argument" || d.nodeKind === "descriptor" ? " small-node" : ""}${
-        emptyClass ? " empty" : ""
-      }${isActiveClass || isActiveArtifact || isSelected ? " active" : ""}`;
+      const classes = ["graph-node"];
+      if (d.nodeKind === "argument" || d.nodeKind === "descriptor") classes.push("small-node");
+      if (d.nodeKind === "argument-class") classes.push("graph-node-arg-class");
+      if (d.nodeKind === "artifact") classes.push("graph-node-artifact");
+      if (d.nodeKind === "argument") classes.push("graph-node-argument");
+      if (d.nodeKind === "descriptor") classes.push("graph-node-descriptor");
+      if (d.nodeKind === "argument-class" && !d.hasInstances) classes.push("empty");
+      if (isActiveClass || isActiveArtifact || isSelected) classes.push("active");
+      return classes.join(" ");
     });
 
   nodeSelection
     .append("text")
-    .attr("class", "graph-label")
+    .attr("class", (d) => `graph-label graph-label-${d.nodeKind}`)
     .attr("text-anchor", "middle")
     .attr("dy", 4)
     .style("pointer-events", "none")
@@ -1173,6 +1204,28 @@ function renderPaperFocusedGraph(svg, item) {
       renderLibraryGraph();
       renderLibraryDetail();
     }
+  });
+
+  const legend = svgSel.append("g").attr("class", "graph-legend").attr("transform", `translate(${width - 250}, 20)`);
+  const legendRows = [
+    { cls: "graph-node-arg-class", label: "Argument class" },
+    { cls: "graph-node-artifact", label: "Artifact" },
+    { cls: "graph-node-descriptor", label: "Descriptor type" },
+  ];
+  legendRows.forEach((row, idx) => {
+    const y = idx * 18;
+    legend
+      .append("circle")
+      .attr("class", `graph-node ${row.cls}`)
+      .attr("cx", 8)
+      .attr("cy", y + 4)
+      .attr("r", 5);
+    legend
+      .append("text")
+      .attr("class", "graph-legend-label")
+      .attr("x", 20)
+      .attr("y", y + 8)
+      .text(row.label);
   });
 }
 
