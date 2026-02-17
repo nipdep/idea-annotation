@@ -483,10 +483,10 @@ const argumentClassRelations = [
   { source: "Idea", target: "Approach", label: "realizes" },
   { source: "Approach", target: "Evidence", label: "generates" },
   { source: "Evidence", target: "Claim", label: "supports" },
-  { source: "Claim", target: "Warrant", label: "warrants" },
-  { source: "Claim", target: "Backing", label: "backs" },
+  { source: "Warrant", target: "Claim", label: "warrants" },
+  { source: "Backing", target: "Claim", label: "backs" },
   { source: "Claim", target: "Qualifier", label: "qualifies" },
-  { source: "Claim", target: "Rebuttal", label: "rebuts" },
+  { source: "Rebuttal", target: "Claim", label: "rebuts" },
 ];
 
 function mapArgumentToClass(argType) {
@@ -956,9 +956,9 @@ function renderPaperFocusedGraph(svg, item) {
   svgSel.selectAll("*").remove();
 
   const layerBands = [
-    { key: "arguments", y: 72, h: 146, label: "ARGUMENT" },
-    { key: "artifacts", y: 228, h: 210, label: "ARTIFACTS" },
-    { key: "descriptors", y: 448, h: 96, label: "DESCRIPTORS" },
+    { key: "arguments", y: 72, h: 160, label: "ARGUMENT" },
+    { key: "artifacts", y: 244, h: 198, label: "ARTIFACTS" },
+    { key: "descriptors", y: 452, h: 92, label: "DESCRIPTORS" },
   ];
 
   const goBackToPaperGraph = () => {
@@ -1055,23 +1055,45 @@ function renderPaperFocusedGraph(svg, item) {
   const descriptorYMin = descriptorBand.minY + 8;
   const descriptorYMax = descriptorBand.maxY - 8;
 
-  const classNodes = layoutNodesInBand(
-    argumentClassNames.map((name) => ({
-      id: `class:${name}`,
-      label: name,
-      nodeKind: "argument-class",
-      className: name,
-      w: clamp(Math.round(name.length * 10.5), 72, 126),
-      h: 32,
-      rx: 10,
-      hasInstances: (argumentByClass[name] || []).length > 0,
-    })),
+  const classNodeDefs = argumentClassNames.map((name) => ({
+    id: `class:${name}`,
+    label: name,
+    nodeKind: "argument-class",
+    className: name,
+    w: clamp(Math.round(name.length * 8.4 + 20), 64, 108),
+    h: 28,
+    rx: 9,
+    hasInstances: (argumentByClass[name] || []).length > 0,
+  }));
+  const classDefMap = new Map(classNodeDefs.map((node) => [node.className, node]));
+  const topClassOrder = ["Warrant", "Backing", "Qualifier", "Rebuttal"];
+  const bottomClassOrder = ["Issue", "Idea", "Approach", "Evidence", "Claim"];
+  const topClassNodes = layoutNodesInBand(
+    topClassOrder.map((name) => classDefMap.get(name)).filter(Boolean),
+    argumentBand.minX + 28,
+    argumentBand.maxX - 28,
+    argumentBand.minY + 16,
+    argumentBand.minY + 16,
+    4
+  );
+  const bottomClassNodes = layoutNodesInBand(
+    bottomClassOrder.map((name) => classDefMap.get(name)).filter(Boolean),
     argumentBand.minX,
     argumentBand.maxX,
-    argumentBand.minY + 20,
-    argumentBand.minY + 66,
+    argumentBand.minY + 68,
+    argumentBand.minY + 68,
     5
   );
+  const placedClassNames = new Set([...topClassOrder, ...bottomClassOrder]);
+  const remainingClassNodes = layoutNodesInBand(
+    classNodeDefs.filter((node) => !placedClassNames.has(node.className)),
+    argumentBand.minX,
+    argumentBand.maxX,
+    argumentBand.minY + 112,
+    argumentBand.minY + 112,
+    5
+  );
+  const classNodes = [...topClassNodes, ...bottomClassNodes, ...remainingClassNodes];
 
   const artifactCols = Math.min(8, Math.max(3, Math.ceil(Math.sqrt(Math.max(1, artifacts.length)))));
   const artifactNodes = layoutNodesInBand(
@@ -1084,8 +1106,8 @@ function renderPaperFocusedGraph(svg, item) {
     })),
     artifactBand.minX,
     artifactBand.maxX,
-    artifactBand.minY + 12,
-    artifactBand.maxY - 12,
+    artifactBand.minY + 10,
+    artifactBand.maxY - 10,
     artifactCols
   );
 
@@ -1093,7 +1115,7 @@ function renderPaperFocusedGraph(svg, item) {
     const cached = state.library.graphPositions[node.id];
     if (!cached) return;
     node.x = clamp(cached.x, artifactBand.minX, artifactBand.maxX);
-    node.y = clamp(cached.y, artifactBand.minY + 12, artifactBand.maxY - 12);
+    node.y = clamp(cached.y, artifactBand.minY + 10, artifactBand.maxY - 10);
   });
 
   const nodeMap = new Map();
@@ -1129,7 +1151,7 @@ function renderPaperFocusedGraph(svg, item) {
       })),
       clamp(classNode.x - 75, argumentBand.minX, argumentBand.maxX - 40),
       clamp(classNode.x + 75, argumentBand.minX + 40, argumentBand.maxX),
-      argumentBand.minY + 92,
+      clamp(classNode.y + 28, argumentBand.minY + 88, argumentBand.maxY - 16),
       argumentBand.maxY - 12,
       3
     );
@@ -1266,12 +1288,12 @@ function renderPaperFocusedGraph(svg, item) {
   nodeSelection
     .filter((d) => d.nodeKind === "argument-class")
     .append("rect")
-    .attr("x", (d) => -((d.w || 72) / 2))
-    .attr("y", (d) => -((d.h || 32) / 2))
-    .attr("width", (d) => d.w || 72)
-    .attr("height", (d) => d.h || 32)
-    .attr("rx", (d) => d.rx || 10)
-    .attr("ry", (d) => d.rx || 10)
+    .attr("x", (d) => -((d.w || 64) / 2))
+    .attr("y", (d) => -((d.h || 28) / 2))
+    .attr("width", (d) => d.w || 64)
+    .attr("height", (d) => d.h || 28)
+    .attr("rx", (d) => d.rx || 9)
+    .attr("ry", (d) => d.rx || 9)
     .attr("class", nodeClassName);
 
   nodeSelection
@@ -1294,8 +1316,12 @@ function renderPaperFocusedGraph(svg, item) {
 
   const movableDrag = window.d3
     .drag()
-    .on("start", (event) => {
+    .on("start", (event, d) => {
       event.sourceEvent?.stopPropagation();
+      if (d.nodeKind === "artifact") {
+        d._dragStartX = d.x;
+        d._dragStartY = d.y;
+      }
     })
     .on("drag", (event, d) => {
       const prevX = d.x;
@@ -1312,8 +1338,6 @@ function renderPaperFocusedGraph(svg, item) {
       const maxX = band ? band.maxX : width - 42;
       d.x = clamp(event.x, minX, maxX);
       d.y = clamp(event.y, minY, maxY);
-      const dx = d.x - prevX;
-      const dy = d.y - prevY;
 
       const artifactId = d.nodeKind === "artifact" ? d.entity?.id : null;
       if (artifactId) {
@@ -1342,9 +1366,13 @@ function renderPaperFocusedGraph(svg, item) {
       if (d.nodeKind === "artifact") {
         const artifactId = d.entity?.id;
         if (!artifactId) return;
+        const deltaX = d.x - (d._dragStartX ?? d.x);
+        const deltaY = d.y - (d._dragStartY ?? d.y);
         state.library.graphPositions[`artifact:${artifactId}`] = { x: d.x, y: d.y };
+        const visibleDescriptorIds = new Set();
         nodes.forEach((node) => {
           if (node.nodeKind === "descriptor" && node.parentArtifactId === artifactId) {
+            visibleDescriptorIds.add(node.id);
             state.library.graphPositions[node.id] = { x: node.x, y: node.y };
             descriptorOffsets[node.id] = {
               dx: node.x - d.x,
@@ -1352,6 +1380,27 @@ function renderPaperFocusedGraph(svg, item) {
             };
           }
         });
+        if (deltaX || deltaY) {
+          Object.entries(state.library.graphPositions).forEach(([nodeId, position]) => {
+            if (
+              !nodeId.startsWith("descriptor:") ||
+              !nodeId.endsWith(`:for:${artifactId}`) ||
+              visibleDescriptorIds.has(nodeId) ||
+              !position
+            ) {
+              return;
+            }
+            const x = clamp((position.x || 0) + deltaX, descriptorBand.minX, descriptorBand.maxX);
+            const y = clamp((position.y || 0) + deltaY, descriptorYMin, descriptorYMax);
+            state.library.graphPositions[nodeId] = { x, y };
+            descriptorOffsets[nodeId] = {
+              dx: x - d.x,
+              dy: y - d.y,
+            };
+          });
+        }
+        delete d._dragStartX;
+        delete d._dragStartY;
         return;
       }
       if (d.nodeKind === "descriptor") {
