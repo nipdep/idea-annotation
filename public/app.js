@@ -956,9 +956,9 @@ function renderPaperFocusedGraph(svg, item) {
   svgSel.selectAll("*").remove();
 
   const layerBands = [
-    { key: "arguments", y: 72, h: 126, label: "ARGUMENT" },
-    { key: "artifacts", y: 214, h: 216, label: "ARTIFACTS" },
-    { key: "descriptors", y: 446, h: 96, label: "DESCRIPTORS" },
+    { key: "arguments", y: 72, h: 146, label: "ARGUMENT" },
+    { key: "artifacts", y: 228, h: 210, label: "ARTIFACTS" },
+    { key: "descriptors", y: 448, h: 96, label: "DESCRIPTORS" },
   ];
 
   const goBackToPaperGraph = () => {
@@ -1061,16 +1061,16 @@ function renderPaperFocusedGraph(svg, item) {
       label: name,
       nodeKind: "argument-class",
       className: name,
-      w: 84,
-      h: 36,
-      rx: 11,
+      w: clamp(Math.round(name.length * 10.5), 72, 126),
+      h: 32,
+      rx: 10,
       hasInstances: (argumentByClass[name] || []).length > 0,
     })),
     argumentBand.minX,
     argumentBand.maxX,
-    argumentBand.minY + 10,
-    argumentBand.minY + 10,
-    argumentClassNames.length
+    argumentBand.minY + 20,
+    argumentBand.minY + 66,
+    5
   );
 
   const artifactCols = Math.min(8, Math.max(3, Math.ceil(Math.sqrt(Math.max(1, artifacts.length)))));
@@ -1129,8 +1129,8 @@ function renderPaperFocusedGraph(svg, item) {
       })),
       clamp(classNode.x - 75, argumentBand.minX, argumentBand.maxX - 40),
       clamp(classNode.x + 75, argumentBand.minX + 40, argumentBand.maxX),
-      argumentBand.minY + 52,
-      argumentBand.maxY - 16,
+      argumentBand.minY + 92,
+      argumentBand.maxY - 12,
       3
     );
 
@@ -1266,12 +1266,12 @@ function renderPaperFocusedGraph(svg, item) {
   nodeSelection
     .filter((d) => d.nodeKind === "argument-class")
     .append("rect")
-    .attr("x", (d) => -((d.w || 84) / 2))
-    .attr("y", (d) => -((d.h || 36) / 2))
-    .attr("width", (d) => d.w || 84)
-    .attr("height", (d) => d.h || 36)
-    .attr("rx", (d) => d.rx || 11)
-    .attr("ry", (d) => d.rx || 11)
+    .attr("x", (d) => -((d.w || 72) / 2))
+    .attr("y", (d) => -((d.h || 32) / 2))
+    .attr("width", (d) => d.w || 72)
+    .attr("height", (d) => d.h || 32)
+    .attr("rx", (d) => d.rx || 10)
+    .attr("ry", (d) => d.rx || 10)
     .attr("class", nodeClassName);
 
   nodeSelection
