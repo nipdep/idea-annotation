@@ -485,7 +485,7 @@ const argumentClassRelations = [
   { source: "Evidence", target: "Claim", label: "supports" },
   { source: "Warrant", target: "Claim", label: "warrants" },
   { source: "Backing", target: "Claim", label: "backs" },
-  { source: "Claim", target: "Qualifier", label: "qualifies" },
+  { source: "Qualifier", target: "Claim", label: "qualifies" },
   { source: "Rebuttal", target: "Claim", label: "rebuts" },
 ];
 
@@ -956,9 +956,9 @@ function renderPaperFocusedGraph(svg, item) {
   svgSel.selectAll("*").remove();
 
   const layerBands = [
-    { key: "arguments", y: 72, h: 160, label: "ARGUMENT" },
-    { key: "artifacts", y: 244, h: 198, label: "ARTIFACTS" },
-    { key: "descriptors", y: 452, h: 92, label: "DESCRIPTORS" },
+    { key: "arguments", y: 72, h: 172, label: "ARGUMENT" },
+    { key: "artifacts", y: 258, h: 186, label: "ARTIFACTS" },
+    { key: "descriptors", y: 454, h: 90, label: "DESCRIPTORS" },
   ];
 
   const goBackToPaperGraph = () => {
@@ -1060,9 +1060,9 @@ function renderPaperFocusedGraph(svg, item) {
     label: name,
     nodeKind: "argument-class",
     className: name,
-    w: clamp(Math.round(name.length * 8.4 + 20), 64, 108),
-    h: 28,
-    rx: 9,
+    w: clamp(Math.round(name.length * 7.6 + 16), 56, 96),
+    h: 24,
+    rx: 8,
     hasInstances: (argumentByClass[name] || []).length > 0,
   }));
   const classDefMap = new Map(classNodeDefs.map((node) => [node.className, node]));
@@ -1072,16 +1072,16 @@ function renderPaperFocusedGraph(svg, item) {
     topClassOrder.map((name) => classDefMap.get(name)).filter(Boolean),
     argumentBand.minX + 28,
     argumentBand.maxX - 28,
-    argumentBand.minY + 16,
-    argumentBand.minY + 16,
+    argumentBand.minY + 28,
+    argumentBand.minY + 28,
     4
   );
   const bottomClassNodes = layoutNodesInBand(
     bottomClassOrder.map((name) => classDefMap.get(name)).filter(Boolean),
     argumentBand.minX,
     argumentBand.maxX,
-    argumentBand.minY + 68,
-    argumentBand.minY + 68,
+    argumentBand.minY + 78,
+    argumentBand.minY + 78,
     5
   );
   const placedClassNames = new Set([...topClassOrder, ...bottomClassOrder]);
@@ -1151,7 +1151,7 @@ function renderPaperFocusedGraph(svg, item) {
       })),
       clamp(classNode.x - 75, argumentBand.minX, argumentBand.maxX - 40),
       clamp(classNode.x + 75, argumentBand.minX + 40, argumentBand.maxX),
-      clamp(classNode.y + 28, argumentBand.minY + 88, argumentBand.maxY - 16),
+      clamp(classNode.y + 24, argumentBand.minY + 102, argumentBand.maxY - 16),
       argumentBand.maxY - 12,
       3
     );
@@ -1288,12 +1288,12 @@ function renderPaperFocusedGraph(svg, item) {
   nodeSelection
     .filter((d) => d.nodeKind === "argument-class")
     .append("rect")
-    .attr("x", (d) => -((d.w || 64) / 2))
-    .attr("y", (d) => -((d.h || 28) / 2))
-    .attr("width", (d) => d.w || 64)
-    .attr("height", (d) => d.h || 28)
-    .attr("rx", (d) => d.rx || 9)
-    .attr("ry", (d) => d.rx || 9)
+    .attr("x", (d) => -((d.w || 56) / 2))
+    .attr("y", (d) => -((d.h || 24) / 2))
+    .attr("width", (d) => d.w || 56)
+    .attr("height", (d) => d.h || 24)
+    .attr("rx", (d) => d.rx || 8)
+    .attr("ry", (d) => d.rx || 8)
     .attr("class", nodeClassName);
 
   nodeSelection
