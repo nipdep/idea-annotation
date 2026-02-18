@@ -649,8 +649,25 @@ function startDescriptorEdit(descriptorId) {
 
 function flattenAuthors(authors) {
   if (!authors) return "";
-  if (Array.isArray(authors)) return authors.join(" ");
-  return String(authors);
+  if (Array.isArray(authors)) {
+    return authors
+      .map((author) => {
+        if (!author) return "";
+        if (typeof author === "string") return author.trim();
+        if (typeof author === "object") {
+          const direct = String(author.name || author.full || "").trim();
+          if (direct) return direct;
+          return [author.given, author.first, author.middle, author.family, author.last]
+            .map((part) => String(part || "").trim())
+            .filter(Boolean)
+            .join(" ");
+        }
+        return String(author).trim();
+      })
+      .filter(Boolean)
+      .join(", ");
+  }
+  return String(authors).trim();
 }
 
 function librarySearchText(item) {
@@ -976,7 +993,12 @@ function renderPaperFocusedGraph(svg, item) {
     .attr("y", 0)
     .attr("width", width)
     .attr("height", height)
-    .attr("fill", "transparent");
+    .attr("fill", "transparent")
+    .on("click", () => {
+      state.library.selectedInstance = null;
+      renderLibraryGraph();
+      renderLibraryDetail();
+    });
 
   svgSel
     .append("text")
