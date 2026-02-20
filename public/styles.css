@@ -820,6 +820,8 @@ textarea[readonly] {
   inset: 0;
   overflow: hidden;
   line-height: 1;
+  z-index: 2;
+  pointer-events: auto;
 }
 
 .pdf-text-layer span,
@@ -829,6 +831,8 @@ textarea[readonly] {
   white-space: pre;
   transform-origin: 0% 0%;
   cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .pdf-text-layer span::selection {

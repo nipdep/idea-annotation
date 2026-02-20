@@ -391,38 +391,41 @@ function hideSelectionMenu() {
 }
 
 function handleDocSelection() {
-  const docView = el("docView");
-  if (!docView) return;
-  const selection = window.getSelection();
-  if (!selection || selection.isCollapsed) {
-    state.pendingSelection = null;
-    hideSelectionMenu();
-    return;
-  }
+  // Let the browser finish selection updates before reading the range.
+  requestAnimationFrame(() => {
+    const docView = el("docView");
+    if (!docView) return;
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+      state.pendingSelection = null;
+      hideSelectionMenu();
+      return;
+    }
 
-  const range = selection.getRangeAt(0);
-  if (!docView.contains(range.commonAncestorContainer)) {
-    state.pendingSelection = null;
-    hideSelectionMenu();
-    return;
-  }
+    const range = selection.getRangeAt(0);
+    if (!docView.contains(range.commonAncestorContainer)) {
+      state.pendingSelection = null;
+      hideSelectionMenu();
+      return;
+    }
 
-  const context = getSelectionContext(range);
-  const text = selection.toString().trim();
-  const spans = getSelectedPdfSpans(range);
-  if (!context || !text || spans.length === 0) {
-    state.pendingSelection = null;
-    hideSelectionMenu();
-    return;
-  }
+    const context = getSelectionContext(range);
+    const text = selection.toString().trim();
+    const spans = getSelectedPdfSpans(range);
+    if (!context || !text || spans.length === 0) {
+      state.pendingSelection = null;
+      hideSelectionMenu();
+      return;
+    }
 
-  state.pendingSelection = {
-    text,
-    section: context.section,
-    page: context.page,
-    spans,
-  };
-  showSelectionMenu(range.getBoundingClientRect());
+    state.pendingSelection = {
+      text,
+      section: context.section,
+      page: context.page,
+      spans,
+    };
+    showSelectionMenu(range.getBoundingClientRect());
+  });
 }
 
 function getSelectedPdfSpans(selectionRange) {
@@ -431,13 +434,11 @@ function getSelectedPdfSpans(selectionRange) {
   const spans = Array.from(docView.querySelectorAll(".pdf-text-layer span"));
   return spans.filter((span) => {
     if (!span.textContent?.trim()) return false;
-    const range = document.createRange();
-    range.selectNodeContents(span);
-    const startsBeforeEnd =
-      selectionRange.compareBoundaryPoints(Range.START_TO_END, range) < 0;
-    const endsAfterStart =
-      selectionRange.compareBoundaryPoints(Range.END_TO_START, range) > 0;
-    return startsBeforeEnd && endsAfterStart;
+    try {
+      return selectionRange.intersectsNode(span);
+    } catch {
+      return false;
+    }
   });
 }
 
@@ -2899,7 +2900,9 @@ function init() {
   el("uploadBtn").addEventListener("click", uploadPdf);
   window.addEventListener("beforeunload", revokeLocalPdfUrl);
   el("docView").addEventListener("mouseup", handleDocSelection);
+  el("docView").addEventListener("touchend", handleDocSelection);
   el("docView").addEventListener("keyup", handleDocSelection);
+  document.addEventListener("selectionchange", handleDocSelection);
   el("addConceptBtn").addEventListener("click", createConcept);
   el("addArgumentBtn").addEventListener("click", createArgument);
   el("addDescriptorBtn").addEventListener("click", createDescriptor);
