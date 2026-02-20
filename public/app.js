@@ -113,26 +113,59 @@ function loadScript(src) {
   });
 }
 
+function resolvePdfJsGlobal() {
+  return (
+    window.pdfjsLib ||
+    window["pdfjs-dist/build/pdf"] ||
+    window["pdfjs-dist/legacy/build/pdf"] ||
+    window.pdfjsDistBuildPdf ||
+    null
+  );
+}
+
+async function resolvePdfWorkerSrc() {
+  const candidates = [
+    withBase("/pdfjs/pdf.worker.js"),
+    withBase("/pdfjs/build/pdf.worker.js"),
+    withBase("/pdfjs/legacy/build/pdf.worker.js"),
+    withBase("/pdfjs/build/pdf.worker.min.js"),
+    withBase("/pdfjs/legacy/build/pdf.worker.min.js"),
+  ];
+
+  for (const src of candidates) {
+    try {
+      const res = await fetch(src, { method: "GET" });
+      if (res.ok) return src;
+    } catch {
+      // continue trying
+    }
+  }
+
+  return "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/build/pdf.worker.min.js";
+}
+
 async function ensurePdfJsLoaded() {
-  if (window.pdfjsLib && typeof window.pdfjsLib.getDocument === "function") {
-    return window.pdfjsLib;
+  const existingGlobal = resolvePdfJsGlobal();
+  if (existingGlobal && typeof existingGlobal.getDocument === "function") {
+    return existingGlobal;
   }
 
   const candidates = [
     withBase("/pdfjs/pdf.js"),
     withBase("/pdfjs/build/pdf.js"),
     withBase("/pdfjs/legacy/build/pdf.js"),
-    "/pdfjs/pdf.js",
-    "/pdfjs/build/pdf.js",
-    "/pdfjs/legacy/build/pdf.js",
+    withBase("/pdfjs/build/pdf.min.js"),
+    withBase("/pdfjs/legacy/build/pdf.min.js"),
+    "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/build/pdf.min.js",
   ];
 
   const errors = [];
   for (const src of candidates) {
     try {
       await loadScript(src);
-      if (window.pdfjsLib && typeof window.pdfjsLib.getDocument === "function") {
-        return window.pdfjsLib;
+      const loadedGlobal = resolvePdfJsGlobal();
+      if (loadedGlobal && typeof loadedGlobal.getDocument === "function") {
+        return loadedGlobal;
       }
       errors.push(`${src}: loaded but pdfjsLib missing`);
     } catch (err) {
@@ -2088,7 +2121,7 @@ async function renderDoc() {
   try {
     const pdfjsLib = await ensurePdfJsLoaded();
     if (pdfjsLib.GlobalWorkerOptions) {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = withBase("/pdfjs/pdf.worker.js");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = await resolvePdfWorkerSrc();
     }
 
     const sourceCandidates = [
