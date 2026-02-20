@@ -296,6 +296,7 @@ function hydrateSourceRefsForEdit(target, sourceRefs, single = false) {
       used: false,
       target,
       virtual: true,
+      anchor: normalizeAnchor(ref.anchor),
     });
     created.push(id);
   });
@@ -340,6 +341,7 @@ function hydrateArgumentRefsFromDescription(description, sourceRefs) {
       used: false,
       target: "argument",
       virtual: true,
+      anchor: normalizeAnchor(ref.anchor),
     });
     created.push(id);
   }
@@ -479,7 +481,19 @@ function commitPendingHighlight(target) {
   }
 
   try {
-    const id = `H${state.highlights.length + 1}`;
+    const id = nextHighlightId();
+    const spanIndexes = (pending.spans || [])
+      .map((span) => Number(span.dataset.spanIndex))
+      .filter((value) => Number.isFinite(value));
+    const firstPage = (pending.spans || [])[0]?.closest(".pdf-page")?.dataset?.page || pending.page || "";
+    const anchor =
+      firstPage && spanIndexes.length
+        ? {
+            page: String(firstPage),
+            start: Math.min(...spanIndexes),
+            end: Math.max(...spanIndexes),
+          }
+        : null;
     state.highlights.push({
       id,
       text: pending.text,
@@ -487,6 +501,7 @@ function commitPendingHighlight(target) {
       page: pending.page || "",
       used: false,
       target,
+      anchor,
     });
     applySpanHighlight(id, pending.spans || []);
 
@@ -556,6 +571,16 @@ function uniqueId(prefix, list) {
   return `${prefix}${String(next).padStart(2, "0")}`;
 }
 
+function nextHighlightId() {
+  const max = state.highlights.reduce((acc, hl) => {
+    const match = /^H(\d+)$/.exec(String(hl.id || ""));
+    if (!match) return acc;
+    const value = Number(match[1]);
+    return Number.isFinite(value) ? Math.max(acc, value) : acc;
+  }, 0);
+  return `H${max + 1}`;
+}
+
 function normalizeAliases(value) {
   return value
     .split(",")
@@ -572,6 +597,103 @@ function normalizeAnnotations(annotation) {
     created_at: base.created_at || null,
     updated_at: base.updated_at || null,
   };
+}
+
+function normalizeAnchor(anchor) {
+  if (!anchor || typeof anchor !== "object") return null;
+  const page = String(anchor.page || "").trim();
+  const start = Number(anchor.start);
+  const end = Number(anchor.end);
+  if (!page || !Number.isFinite(start) || !Number.isFinite(end)) return null;
+  return {
+    page,
+    start: Math.max(0, Math.floor(start)),
+    end: Math.max(0, Math.floor(end)),
+  };
+}
+
+function parsePageNumber(value) {
+  if (value == null) return "";
+  const text = String(value).trim();
+  if (!text) return "";
+  const direct = text.match(/^\d+$/);
+  if (direct) return direct[0];
+  const embedded = text.match(/(\d+)/);
+  return embedded ? embedded[1] : "";
+}
+
+function hydrateHighlightsFromAnnotations() {
+  const hydrated = [];
+  let seq = 0;
+
+  const addHighlight = (target, ref, fallbackText = "") => {
+    if (!ref) return;
+    const anchor = normalizeAnchor(ref.anchor);
+    const page = parsePageNumber(ref.page) || anchor?.page || "";
+    const section = String(ref.section || (page ? `Page ${page}` : "PDF")).trim();
+    const text = String(ref.text || fallbackText || "").trim();
+    const id = `H${++seq}`;
+    hydrated.push({
+      id,
+      text,
+      section,
+      page: page || null,
+      used: true,
+      target,
+      anchor,
+      persisted: true,
+    });
+  };
+
+  (state.annotations.concepts || []).forEach((concept) => {
+    (concept.source_refs || []).forEach((ref) => addHighlight("concept", ref, concept.label || ""));
+  });
+
+  (state.annotations.arguments || []).forEach((argument) => {
+    const refList = Array.isArray(argument.source_refs) ? argument.source_refs : [];
+    const descParts = String(argument.description || "")
+      .split(/\n{2,}/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    refList.forEach((ref, index) => {
+      addHighlight("argument", ref, descParts[index] || argument.text || "");
+    });
+  });
+
+  (state.annotations.descriptors || []).forEach((descriptor) => {
+    (descriptor.source_refs || []).forEach((ref) =>
+      addHighlight("descriptor", ref, descriptor.descriptor_type || "")
+    );
+  });
+
+  state.highlights = hydrated;
+}
+
+function spansFromAnchor(anchor) {
+  const normalized = normalizeAnchor(anchor);
+  if (!normalized) return [];
+  const pageEl = document.querySelector(`.pdf-page[data-page="${normalized.page}"]`);
+  if (!pageEl) return [];
+  const spans = Array.from(pageEl.querySelectorAll(".pdf-text-layer span[data-span-index]"));
+  if (!spans.length) return [];
+  const start = Math.max(0, Math.min(normalized.start, spans.length - 1));
+  const end = Math.max(start, Math.min(normalized.end, spans.length - 1));
+  return spans.slice(start, end + 1).filter((span) => span.textContent?.trim());
+}
+
+function applySavedHighlightsToPdf() {
+  const spans = document.querySelectorAll(".pdf-text-layer span[data-highlight-ids]");
+  spans.forEach((span) => {
+    delete span.dataset.highlightIds;
+    refreshSpanHighlightState(span);
+  });
+
+  state.highlights.forEach((hl) => {
+    if (hl.virtual) return;
+    const targetSpans = spansFromAnchor(hl.anchor);
+    if (!targetSpans.length) return;
+    applySpanHighlight(hl.id, targetSpans);
+  });
 }
 
 function renderArtifactTypeSelect() {
@@ -2201,7 +2323,12 @@ async function renderDoc() {
       if (textRender?.promise) {
         await textRender.promise;
       }
+      const textSpans = Array.from(textLayer.querySelectorAll("span"));
+      textSpans.forEach((span, index) => {
+        span.dataset.spanIndex = String(index);
+      });
     }
+    applySavedHighlightsToPdf();
   } catch (err) {
     docView.innerHTML = `<p class="muted">PDF viewer failed to load: ${err.message}</p>`;
     showToast(`PDF load failed: ${err.message}`, "error");
@@ -2337,11 +2464,20 @@ function removeHighlightsForSourceRefs(target, sourceRefs) {
 
   const consumedIds = [];
   sourceRefs.forEach((ref) => {
+    const refAnchor = normalizeAnchor(ref?.anchor);
     const section = normalizeSourceRefValue(ref?.section, "Body");
     const page = normalizeSourceRefValue(ref?.page, "");
     const text = normalizeSourceRefValue(ref?.text, "");
     const match = pool.find((hl) => {
       if (consumedIds.includes(hl.id)) return false;
+      const hlAnchor = normalizeAnchor(hl.anchor);
+      if (refAnchor && hlAnchor) {
+        return (
+          hlAnchor.page === refAnchor.page &&
+          hlAnchor.start === refAnchor.start &&
+          hlAnchor.end === refAnchor.end
+        );
+      }
       const hlSection = normalizeSourceRefValue(hl.section, "Body");
       const hlPage = normalizeSourceRefValue(hl.page, "");
       const hlText = normalizeSourceRefValue(hl.text, "");
@@ -2589,7 +2725,12 @@ function createConcept() {
         .map((id) => {
           const hl = state.highlights.find((h) => h.id === id);
           if (!hl) return null;
-          return { section: hl.section, page: hl.page || null };
+          return {
+            section: hl.section,
+            page: hl.page || null,
+            text: hl.text || "",
+            anchor: hl.anchor || undefined,
+          };
         })
         .filter(Boolean)
     : [];
@@ -2640,7 +2781,12 @@ function createArgument() {
   const sourceRefs = Array.from(state.highlightSelection.argument).map((id) => {
     const hl = state.highlights.find((h) => h.id === id);
     if (!hl) return null;
-    return { section: hl.section, page: hl.page || null };
+    return {
+      section: hl.section,
+      page: hl.page || null,
+      text: hl.text || "",
+      anchor: hl.anchor || undefined,
+    };
   }).filter(Boolean);
 
   const editingId = state.editing.argumentId;
@@ -2690,6 +2836,7 @@ function createDescriptor() {
         section: hl.section,
         page: hl.page || null,
         text: hl.text || "",
+        anchor: hl.anchor || undefined,
       };
     })
     .filter(Boolean);
@@ -2761,6 +2908,7 @@ async function uploadPdf() {
   state.editing.conceptId = null;
   state.editing.argumentId = null;
   state.editing.descriptorId = null;
+  hydrateHighlightsFromAnnotations();
 
   renderMetadata();
   await renderDoc();
