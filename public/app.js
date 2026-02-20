@@ -40,13 +40,11 @@ const state = {
   pdfHash: "",
   metadata: {},
   metadataChecks: {},
-  doc: null,
-  teiXml: "",
   annotations: { concepts: [], arguments: [], descriptors: [], created_at: null },
   highlights: [],
   pendingSelection: null,
   argumentDescription: "",
-  docMode: "text",
+  pdfRenderSeq: 0,
   virtualHighlightSeq: 0,
   editing: {
     conceptId: null,
@@ -256,9 +254,11 @@ function getSelectionContext(range) {
   const element = range.commonAncestorContainer.nodeType === 1
     ? range.commonAncestorContainer
     : range.commonAncestorContainer.parentElement;
-  const sectionEl = element ? element.closest("[data-section]") : null;
+  const pageEl = element ? element.closest(".pdf-page") : null;
+  const page = pageEl?.dataset.page || "";
   return {
-    section: sectionEl?.dataset.section || "Body",
+    section: page ? `Page ${page}` : "PDF",
+    page,
   };
 }
 
@@ -312,47 +312,85 @@ function handleDocSelection() {
 
   const context = getSelectionContext(range);
   const text = selection.toString().trim();
-  if (!context || !text) {
+  const spans = getSelectedPdfSpans(range);
+  if (!context || !text || spans.length === 0) {
     state.pendingSelection = null;
     hideSelectionMenu();
     return;
   }
 
   state.pendingSelection = {
-    range: range.cloneRange(),
     text,
     section: context.section,
+    page: context.page,
+    spans,
   };
   showSelectionMenu(range.getBoundingClientRect());
 }
 
+function getSelectedPdfSpans(selectionRange) {
+  const docView = el("docView");
+  if (!docView) return [];
+  const spans = Array.from(docView.querySelectorAll(".pdf-text-layer span"));
+  return spans.filter((span) => {
+    if (!span.textContent?.trim()) return false;
+    const range = document.createRange();
+    range.selectNodeContents(span);
+    const startsBeforeEnd =
+      selectionRange.compareBoundaryPoints(Range.START_TO_END, range) < 0;
+    const endsAfterStart =
+      selectionRange.compareBoundaryPoints(Range.END_TO_START, range) > 0;
+    return startsBeforeEnd && endsAfterStart;
+  });
+}
+
+function applySpanHighlight(id, spans) {
+  spans.forEach((span) => {
+    const current = (span.dataset.highlightIds || "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (!current.includes(id)) current.push(id);
+    span.dataset.highlightIds = current.join(",");
+    refreshSpanHighlightState(span);
+  });
+}
+
+function refreshSpanHighlightState(span) {
+  const ids = (span.dataset.highlightIds || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (!ids.length) {
+    span.classList.remove("ia-highlight", "ia-highlight-used");
+    delete span.dataset.highlightIds;
+    return;
+  }
+  const related = ids
+    .map((id) => state.highlights.find((hl) => hl.id === id))
+    .filter(Boolean);
+  span.classList.toggle("ia-highlight", related.length > 0);
+  span.classList.toggle("ia-highlight-used", related.some((hl) => hl.used));
+}
+
 function commitPendingHighlight(target) {
   const pending = state.pendingSelection;
-  if (!pending || !pending.range || !pending.text) {
+  if (!pending || !pending.text) {
     showToast("Select text in the document first.", "error");
     return;
   }
 
   try {
-    const mark = document.createElement("mark");
     const id = `H${state.highlights.length + 1}`;
-    mark.dataset.hid = id;
-    try {
-      pending.range.surroundContents(mark);
-    } catch (err) {
-      const contents = pending.range.extractContents();
-      mark.appendChild(contents);
-      pending.range.insertNode(mark);
-    }
-
     state.highlights.push({
       id,
       text: pending.text,
       section: pending.section,
-      page: "",
+      page: pending.page || "",
       used: false,
       target,
     });
+    applySpanHighlight(id, pending.spans || []);
 
     if (target === "argument") {
       state.highlightSelection.argument.add(id);
@@ -1970,368 +2008,91 @@ function renderMetadata() {
   });
 }
 
-function renderDoc() {
+async function renderDoc() {
   const docView = el("docView");
+  if (!docView) return;
+  const renderSeq = ++state.pdfRenderSeq;
   docView.innerHTML = "";
 
-  if (state.teiXml) {
-    if (renderTeiDoc(state.teiXml, docView)) return;
-  }
-
-  if (!state.doc) {
+  if (!state.paperId) {
     docView.innerHTML = '<p class="muted">Upload a paper to begin.</p>';
     return;
   }
 
-  state.doc.sections.forEach((section) => {
-    const sectionEl = document.createElement("div");
-    sectionEl.className = "section";
-    sectionEl.dataset.section = section.title;
-
-    const heading = document.createElement("h3");
-    heading.textContent = section.title;
-    sectionEl.appendChild(heading);
-
-    section.paragraphs.forEach((paragraph) => {
-      const p = document.createElement("p");
-      p.textContent = paragraph;
-      sectionEl.appendChild(p);
-    });
-
-    docView.appendChild(sectionEl);
-  });
-}
-
-function updatePdfSrc() {
-  const frame = el("pdfFrame");
-  const placeholder = el("pdfPlaceholder");
-  if (!frame || !placeholder) return;
-  if (!state.paperId) {
-    frame.removeAttribute("src");
-    placeholder.style.display = "block";
+  const pdfjsLib = window.pdfjsLib;
+  if (!pdfjsLib || typeof pdfjsLib.getDocument !== "function") {
+    docView.innerHTML = '<p class="muted">PDF.js failed to load.</p>';
     return;
   }
-  frame.src = withBase(`/api/paper/${state.paperId}/pdf`);
-  placeholder.style.display = "none";
-}
 
-function setDocMode(mode) {
-  state.docMode = mode;
-  const textPane = el("docTextPane");
-  const pdfPane = el("docPdfPane");
-  if (textPane) textPane.classList.toggle("active", mode === "text");
-  if (pdfPane) pdfPane.classList.toggle("active", mode === "pdf");
-  document.querySelectorAll(".doc-toggle-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.doc === mode);
-  });
-  if (mode === "pdf") updatePdfSrc();
-}
+  docView.innerHTML = '<p class="muted">Loading PDF...</p>';
 
-function renderTeiDoc(teiXml, docView) {
-  const parser = new DOMParser();
-  const xml = parser.parseFromString(teiXml, "text/xml");
-  if (xml.querySelector("parsererror")) {
-    return false;
-  }
-
-  const container = document.createElement("div");
-  container.className = "tei-doc";
-
-  const header = document.createElement("section");
-  header.className = "tei-header";
-  header.dataset.section = "Header";
-
-  const titleStmt = getByTag(xml, "titleStmt")[0] || null;
-  const titleNode = titleStmt ? getByTag(titleStmt, "title")[0] : null;
-  const title = extractText(titleNode);
-  if (title) {
-    const h1 = document.createElement("h1");
-    h1.className = "tei-title";
-    h1.textContent = title;
-    header.appendChild(h1);
-  }
-
-  const authorNodes = titleStmt ? getByTag(titleStmt, "author") : [];
-  const authors = Array.from(authorNodes)
-    .map((node) => formatAuthor(node))
-    .filter(Boolean);
-  if (authors.length) {
-    const authorBlock = document.createElement("div");
-    authorBlock.className = "tei-authors";
-    authorBlock.textContent = authors.join(", ");
-    header.appendChild(authorBlock);
-  }
-
-  if (header.childNodes.length) container.appendChild(header);
-
-  const profileDesc = getByTag(xml, "profileDesc")[0] || null;
-  const front = getByTag(xml, "front")[0] || null;
-  const abstractNode =
-    (profileDesc ? getByTag(profileDesc, "abstract")[0] : null) ||
-    (front ? getByTag(front, "abstract")[0] : null) ||
-    getByTag(xml, "abstract")[0] ||
-    null;
-  const abstractText = extractText(abstractNode);
-  if (abstractText) {
-    const abstractSection = document.createElement("section");
-    abstractSection.className = "tei-abstract";
-    abstractSection.dataset.section = "Abstract";
-    const label = document.createElement("h3");
-    label.textContent = "Abstract";
-    abstractSection.appendChild(label);
-    const p = document.createElement("p");
-    p.className = "doc-paragraph";
-    p.textContent = abstractText;
-    abstractSection.appendChild(p);
-    container.appendChild(abstractSection);
-  }
-
-  const textNode = getByTag(xml, "text")[0] || null;
-  const body = (textNode ? getByTag(textNode, "body")[0] : null) || getByTag(xml, "body")[0];
-  if (body) {
-    renderTeiChildren(body, container, "Body");
-  }
-
-  const back = (textNode ? getByTag(textNode, "back")[0] : null) || getByTag(xml, "back")[0];
-  const listBibl = back ? getByTag(back, "listBibl")[0] : null;
-  if (listBibl) {
-    const refSection = document.createElement("section");
-    refSection.className = "tei-section";
-    refSection.dataset.section = "References";
-    const head = document.createElement("h3");
-    head.textContent = "References";
-    refSection.appendChild(head);
-
-    const list = document.createElement("ol");
-    list.className = "tei-bibl";
-    const biblNodes = [
-      ...getByTag(listBibl, "biblStruct"),
-      ...getByTag(listBibl, "bibl"),
-    ];
-    biblNodes.forEach((bibl) => {
-      const item = document.createElement("li");
-      item.textContent = extractText(bibl);
-      list.appendChild(item);
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = withBase("/pdfjs/build/pdf.worker.js");
+    const loadingTask = pdfjsLib.getDocument({
+      url: withBase(`/api/paper/${state.paperId}/pdf`),
     });
-    refSection.appendChild(list);
-    container.appendChild(refSection);
-  }
+    const pdf = await loadingTask.promise;
+    if (renderSeq !== state.pdfRenderSeq) return;
 
-  docView.appendChild(container);
-  return true;
-}
+    docView.innerHTML = "";
+    const doc = document.createElement("div");
+    doc.className = "pdf-doc";
+    docView.appendChild(doc);
 
-function extractText(node) {
-  if (!node) return "";
-  return node.textContent.replace(/\s+/g, " ").trim();
-}
+    const availableWidth = Math.max(320, docView.clientWidth - 40);
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      if (renderSeq !== state.pdfRenderSeq) return;
 
-function formatAuthor(authorNode) {
-  if (!authorNode) return "";
-  const forenames = getByTag(authorNode, "forename").map((n) => extractText(n));
-  const surname = extractText(getByTag(authorNode, "surname")[0]);
-  const name = [...forenames, surname].filter(Boolean).join(" ");
-  return name || extractText(authorNode);
-}
+      const baseViewport = page.getViewport({ scale: 1 });
+      const scale = Math.max(0.8, Math.min(1.8, availableWidth / baseViewport.width));
+      const viewport = page.getViewport({ scale });
 
-function renderTeiChildren(node, parent, fallbackSection) {
-  Array.from(node.childNodes).forEach((child) => {
-    if (child.nodeType !== 1) return;
-    const tag = (child.localName || child.tagName || "").toLowerCase();
+      const pageEl = document.createElement("div");
+      pageEl.className = "pdf-page";
+      pageEl.dataset.section = `Page ${pageNumber}`;
+      pageEl.dataset.page = String(pageNumber);
+      pageEl.style.width = `${viewport.width}px`;
+      pageEl.style.height = `${viewport.height}px`;
 
-    if (tag === "div") {
-      const headNode = Array.from(child.children).find(
-        (el) => (el.localName || el.tagName || "").toLowerCase() === "head"
-      );
-      const title = extractText(headNode);
-      if (!title) {
-        renderTeiChildren(child, parent, fallbackSection);
-        return;
-      }
-      const section = document.createElement("section");
-      section.className = "tei-section";
-      section.dataset.section = title;
-      const h3 = document.createElement("h3");
-      h3.textContent = title;
-      section.appendChild(h3);
-      parent.appendChild(section);
-      renderTeiChildren(child, section, title);
-      return;
-    }
+      const canvas = document.createElement("canvas");
+      canvas.className = "pdf-canvas";
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      canvas.style.width = `${viewport.width}px`;
+      canvas.style.height = `${viewport.height}px`;
 
-    if (tag === "head") {
-      return;
-    }
+      const textLayer = document.createElement("div");
+      textLayer.className = "pdf-text-layer";
+      textLayer.style.width = `${viewport.width}px`;
+      textLayer.style.height = `${viewport.height}px`;
+      textLayer.style.setProperty("--scale-factor", String(viewport.scale));
 
-    if (tag === "p") {
-      const p = document.createElement("p");
-      p.className = "doc-paragraph";
-      p.textContent = extractText(child);
-      parent.appendChild(p);
-      return;
-    }
+      pageEl.appendChild(canvas);
+      pageEl.appendChild(textLayer);
+      doc.appendChild(pageEl);
 
-    if (tag === "figure") {
-      const fig = document.createElement("div");
-      fig.className = "tei-figure";
-      const figHead = extractText(getByTag(child, "head")[0]);
-      const figDesc = extractText(getByTag(child, "figDesc")[0]);
-      const graphic = getByTag(child, "graphic")[0] || null;
-      const graphicRef = graphic?.getAttribute("url") || graphic?.getAttribute("target") || "";
-      const title = figHead || "Figure";
-      const label = document.createElement("div");
-      label.className = "tei-figure-title";
-      label.textContent = title;
-      fig.appendChild(label);
-      if (graphicRef) {
-        const ref = document.createElement("div");
-        ref.className = "tei-figure-desc";
-        ref.textContent = `Graphic: ${graphicRef}`;
-        fig.appendChild(ref);
-      }
-      if (figDesc) {
-        const desc = document.createElement("div");
-        desc.className = "tei-figure-desc";
-        desc.textContent = figDesc;
-        fig.appendChild(desc);
-      }
-      const figTable = getByTag(child, "table")[0] || null;
-      if (figTable) {
-        const tableEl = buildTable(figTable);
-        if (tableEl) fig.appendChild(tableEl);
-      }
-      parent.appendChild(fig);
-      return;
-    }
+      await page.render({
+        canvasContext: canvas.getContext("2d"),
+        viewport,
+      }).promise;
 
-    if (tag === "table") {
-      const tableEl = buildTable(child);
-      if (tableEl) parent.appendChild(tableEl);
-      return;
-    }
-
-    if (tag === "formula") {
-      const block = document.createElement("div");
-      block.className = "tei-formula";
-      const formulaText = extractText(child);
-      block.textContent = formulaText || "[Formula]";
-      parent.appendChild(block);
-      return;
-    }
-
-    if (tag === "list") {
-      const ul = document.createElement("ul");
-      ul.className = "tei-list";
-      getByTag(child, "item").forEach((itemNode) => {
-        const li = document.createElement("li");
-        li.textContent = extractText(itemNode);
-        ul.appendChild(li);
+      const textContent = await page.getTextContent();
+      const textRender = pdfjsLib.renderTextLayer({
+        textContent,
+        container: textLayer,
+        viewport,
+        textDivs: [],
       });
-      parent.appendChild(ul);
-      return;
+      if (textRender?.promise) {
+        await textRender.promise;
+      }
     }
-
-    renderTeiChildren(child, parent, fallbackSection);
-  });
-}
-
-function buildTable(tableNode) {
-  const rows = getByTag(tableNode, "row");
-  if (rows.length === 0) {
-    const fallback = extractText(tableNode);
-    if (!fallback) return null;
-    const wrap = document.createElement("div");
-    wrap.className = "tei-table-wrap";
-    const badge = document.createElement("img");
-    badge.className = "tei-table-badge";
-    badge.src = withBase("/assets/icon.png");
-    badge.alt = "Table";
-    const pre = document.createElement("div");
-    pre.className = "tei-figure-desc";
-    pre.textContent = fallback;
-    wrap.appendChild(badge);
-    wrap.appendChild(pre);
-    return wrap;
+  } catch (err) {
+    docView.innerHTML = '<p class="muted">PDF viewer failed to load.</p>';
+    showToast(`PDF load failed: ${err.message}`, "error");
   }
-
-  const wrap = document.createElement("div");
-  wrap.className = "tei-table-wrap";
-  const badge = document.createElement("img");
-  badge.className = "tei-table-badge";
-  badge.src = withBase("/assets/icon.png");
-  badge.alt = "Table";
-
-  const table = document.createElement("table");
-  table.className = "tei-table";
-  rows.forEach((rowNode) => {
-    const tr = document.createElement("tr");
-    getByTag(rowNode, "cell").forEach((cellNode) => {
-      const td = document.createElement("td");
-      td.textContent = extractText(cellNode);
-      tr.appendChild(td);
-    });
-    table.appendChild(tr);
-  });
-
-  wrap.appendChild(badge);
-  wrap.appendChild(table);
-  return wrap;
-}
-
-function getByTag(root, tag) {
-  if (!root) return [];
-  if (root.getElementsByTagNameNS) {
-    return Array.from(root.getElementsByTagNameNS("*", tag));
-  }
-  return Array.from(root.getElementsByTagName(tag));
-}
-
-function renderHighlights() {
-  const list = el("highlightList");
-  if (!list) return;
-  list.innerHTML = "";
-  const available = state.highlights.filter((hl) => !hl.used);
-  if (available.length === 0) {
-    list.innerHTML = '<div class="muted">No highlights yet.</div>';
-    return;
-  }
-
-  available.forEach((hl) => {
-    const item = document.createElement("div");
-    item.className = `highlight-entry ${hl.used ? "used" : ""}`;
-
-    const text = document.createElement("div");
-    text.textContent = hl.text;
-
-    const meta = document.createElement("div");
-    meta.className = "meta";
-    meta.textContent = `Section: ${hl.section}${hl.page ? ` - Page ${hl.page}` : ""}${hl.used ? " - Used" : ""}`;
-
-    const pageInput = document.createElement("input");
-    pageInput.type = "text";
-    pageInput.placeholder = "Page #";
-    pageInput.value = hl.page || "";
-    pageInput.addEventListener("input", (e) => {
-      hl.page = e.target.value.trim();
-    });
-
-    const remove = document.createElement("button");
-    remove.className = "ghost";
-    remove.textContent = "Remove";
-    remove.addEventListener("click", () => {
-      removeHighlight(hl.id);
-      state.highlightSelection.concept.delete(hl.id);
-      state.highlightSelection.argument.delete(hl.id);
-      state.highlightSelection.descriptor.delete(hl.id);
-      renderHighlightPickers();
-    });
-
-    item.appendChild(text);
-    item.appendChild(meta);
-    item.appendChild(pageInput);
-    item.appendChild(remove);
-    list.appendChild(item);
-  });
 }
 
 function renderHighlightPickers() {
@@ -2404,10 +2165,21 @@ function renderHighlightPickers() {
 }
 
 function removeHighlight(id) {
-  const mark = document.querySelector(`mark[data-hid="${id}"]`);
-  if (mark) {
-    mark.replaceWith(document.createTextNode(mark.textContent));
-  }
+  const spans = document.querySelectorAll(".pdf-text-layer span[data-highlight-ids]");
+  spans.forEach((span) => {
+    const ids = (span.dataset.highlightIds || "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (!ids.includes(id)) return;
+    const next = ids.filter((value) => value !== id);
+    if (next.length) {
+      span.dataset.highlightIds = next.join(",");
+    } else {
+      delete span.dataset.highlightIds;
+    }
+    refreshSpanHighlightState(span);
+  });
   state.highlights = state.highlights.filter((h) => h.id !== id);
   state.highlightSelection.concept.delete(id);
   state.highlightSelection.argument.delete(id);
@@ -2424,8 +2196,14 @@ function consumeHighlights(ids) {
     state.highlightSelection.concept.delete(id);
     state.highlightSelection.argument.delete(id);
     state.highlightSelection.descriptor.delete(id);
-    const mark = document.querySelector(`mark[data-hid="${id}"]`);
-    if (mark) mark.classList.add("used");
+    const spans = document.querySelectorAll(".pdf-text-layer span[data-highlight-ids]");
+    spans.forEach((span) => {
+      const related = (span.dataset.highlightIds || "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+      if (related.includes(id)) refreshSpanHighlightState(span);
+    });
   });
   updateDescription("argument");
 }
@@ -2845,7 +2623,7 @@ async function uploadPdf() {
   form.append("file", file);
 
   setHint("");
-  const loadingToast = showToast("Parsing PDF with Grobid...", "loading", { persist: true });
+  const loadingToast = showToast("Loading PDF...", "loading", { persist: true });
   const res = await fetch(withBase("/api/upload"), { method: "POST", body: form });
   if (!res.ok) {
     if (loadingToast) loadingToast.remove();
@@ -2857,8 +2635,6 @@ async function uploadPdf() {
   state.paperId = data.paper_id;
   state.pdfHash = data.pdf_hash || "";
   state.metadata = data.metadata || {};
-  state.doc = data.doc;
-  state.teiXml = data.tei_xml || "";
   state.annotations = normalizeAnnotations(data.annotation);
   state.metadataChecks = data.annotation?.metadata_checks || {};
   state.highlights = [];
@@ -2872,13 +2648,8 @@ async function uploadPdf() {
   state.editing.argumentId = null;
   state.editing.descriptorId = null;
 
-  const info = el("paperInfo");
-  if (info) {
-    info.textContent = `Saved as dataset/papers/${state.paperId}.{pdf,tei.xml,md,json}`;
-  }
-
   renderMetadata();
-  renderDoc();
+  await renderDoc();
   renderHighlightPickers();
   renderConceptList();
   renderArgumentList();
@@ -2896,7 +2667,6 @@ async function uploadPdf() {
   } else {
     showToast("Paper loaded and ready to annotate.", "success");
   }
-  updatePdfSrc();
 }
 
 function validateRequiredArguments() {
@@ -3012,12 +2782,6 @@ function init() {
   wireNavigation();
   wireLibraryControls();
   wireSelectionMenu();
-  setDocMode(state.docMode);
-
-  const info = el("paperInfo");
-  if (info) {
-    info.textContent = "Files will save under dataset/papers/";
-  }
 
   el("uploadBtn").addEventListener("click", uploadPdf);
   el("docView").addEventListener("mouseup", handleDocSelection);
@@ -3041,13 +2805,6 @@ function init() {
       const page = el("annotatorPage");
       if (!page) return;
       page.classList.toggle("doc-expanded");
-    });
-  }
-
-  const docSwapBtn = el("docSwapBtn");
-  if (docSwapBtn) {
-    docSwapBtn.addEventListener("click", () => {
-      setDocMode(state.docMode === "text" ? "pdf" : "text");
     });
   }
 }

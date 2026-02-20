@@ -4,15 +4,13 @@ const crypto = require("crypto");
 const express = require("express");
 const multer = require("multer");
 const fetch = require("node-fetch");
-const FormData = require("form-data");
-const { teiToDoc, docToMarkdown } = require("./tei");
+const pdfParse = require("pdf-parse");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DATASET_DIR = path.join(__dirname, "..", "dataset", "papers");
 const TMP_DIR = path.join(__dirname, "..", "tmp");
 const INDEX_PATH = path.join(DATASET_DIR, "index.json");
-const GROBID_URL = process.env.GROBID_URL || "http://localhost:8070";
 const LLM_URL = process.env.LLM_URL || "http://localhost:1234/v1/chat/completions";
 const LLM_MODEL = process.env.LLM_MODEL || "qwen2.5-7b-instruct-1m";
 const LLM_MODE = process.env.LLM_MODE || "chat";
@@ -48,16 +46,39 @@ function hasMetadataObject(metadata) {
   return !!metadata && typeof metadata === "object" && !Array.isArray(metadata) && Object.keys(metadata).length > 0;
 }
 
+function sanitizeMetadata(metadata) {
+  return {
+    title: String(metadata?.title || "").trim(),
+    doi: String(metadata?.doi || "").trim(),
+    year: String(metadata?.year || "").trim(),
+    venue: String(metadata?.venue || "").trim(),
+    authors: normalizeAuthors(metadata?.authors),
+  };
+}
+
 function resolvePaperMetadata(loaded, fallbackMetadata = null) {
   const annotationMetadata = loaded?.annotation?.metadata;
-  if (hasMetadataObject(annotationMetadata)) return annotationMetadata;
-  if (hasMetadataObject(fallbackMetadata)) return fallbackMetadata;
-  return loaded?.metadata || {};
+  if (hasMetadataObject(annotationMetadata)) return sanitizeMetadata(annotationMetadata);
+  if (hasMetadataObject(fallbackMetadata)) return sanitizeMetadata(fallbackMetadata);
+  return sanitizeMetadata(loaded?.metadata || {});
 }
 
 function findIndexEntryByPaperId(index, paperId) {
   const items = index?.items || {};
   return Object.values(items).find((entry) => entry?.paper_id === paperId) || null;
+}
+
+function sanitizeAuthorName(name) {
+  return String(name || "")
+    .replace(/\b(first|middle|last)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeAuthors(value) {
+  if (!value) return [];
+  const raw = Array.isArray(value) ? value : String(value).split(/[;,]/);
+  return raw.map((name) => sanitizeAuthorName(name)).filter(Boolean);
 }
 
 function hashFile(filePath) {
@@ -71,20 +92,16 @@ function hashFile(filePath) {
 }
 
 function loadPaper(paperId) {
-  const mdPath = paperPath(paperId, "md");
-  const teiPath = paperPath(paperId, "tei.xml");
+  const pdfPath = paperPath(paperId, "pdf");
   const jsonPath = paperPath(paperId, "json");
 
-  if (!fs.existsSync(mdPath) || !fs.existsSync(teiPath)) return null;
-
-  const teiXml = fs.readFileSync(teiPath, "utf8");
-  const { metadata: extractedMetadata, doc } = teiToDoc(teiXml);
+  if (!fs.existsSync(pdfPath)) return null;
   const annotation = fs.existsSync(jsonPath)
     ? JSON.parse(fs.readFileSync(jsonPath, "utf8"))
     : null;
-  const metadata = hasMetadataObject(annotation?.metadata) ? annotation.metadata : extractedMetadata;
+  const metadata = hasMetadataObject(annotation?.metadata) ? annotation.metadata : {};
 
-  return { teiXml, metadata, extractedMetadata, doc, annotation };
+  return { metadata, annotation };
 }
 
 function renderIndex(res) {
@@ -98,6 +115,7 @@ app.get("/", (req, res) => renderIndex(res));
 app.get("/index.html", (req, res) => renderIndex(res));
 
 app.use(express.static(path.join(__dirname, "..", "public")));
+app.use("/pdfjs", express.static(path.join(__dirname, "..", "node_modules", "pdfjs-dist")));
 
 function paperPath(paperId, ext) {
   return path.join(DATASET_DIR, `${paperId}.${ext}`);
@@ -108,22 +126,40 @@ function randomId() {
   return `paper_${Date.now()}_${rand}`;
 }
 
-async function callGrobid(pdfPath) {
-  const form = new FormData();
-  form.append("input", fs.createReadStream(pdfPath));
-  form.append("consolidateHeader", "1");
+async function extractPdfMetadata(pdfPath) {
+  const fallback = { title: "", doi: "", year: "", venue: "", authors: [] };
+  try {
+    const buffer = fs.readFileSync(pdfPath);
+    const parsed = await pdfParse(buffer);
+    const info = parsed?.info || {};
+    const text = String(parsed?.text || "");
 
-  const res = await fetch(`${GROBID_URL}/api/processFulltextDocument`, {
-    method: "POST",
-    body: form,
-    headers: form.getHeaders(),
-  });
+    const lines = text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Grobid error: ${res.status} ${text}`);
+    const infoTitle = String(info.Title || "").trim();
+    const inferredTitle = lines.find((line) => line.length > 12) || "";
+    const title =
+      infoTitle && !/^(untitled|microsoft word|acrobat)/i.test(infoTitle)
+        ? infoTitle
+        : inferredTitle;
+
+    const doiMatch = text.match(/\b10\.\d{4,9}\/[-._;()/:A-Z0-9]+\b/i);
+    const yearMatch = text.match(/\b(19|20)\d{2}\b/);
+    const authors = normalizeAuthors(info.Author);
+
+    return {
+      title: title || "",
+      doi: doiMatch ? doiMatch[0] : "",
+      year: yearMatch ? yearMatch[0] : "",
+      venue: "",
+      authors,
+    };
+  } catch {
+    return fallback;
   }
-  return res.text();
 }
 
 async function fetchCrossref(metadata) {
@@ -156,20 +192,20 @@ async function fetchCrossref(metadata) {
       "",
     venue: Array.isArray(item["container-title"]) ? item["container-title"][0] : item["container-title"],
     authors: Array.isArray(item.author)
-      ? item.author.map((a) => [a.given, a.family].filter(Boolean).join(" "))
+      ? item.author.map((a) => sanitizeAuthorName([a.given, a.family].filter(Boolean).join(" ")))
       : [],
   };
 }
 
 function mergeMetadata(base, extra) {
-  if (!extra) return base;
-  return {
+  if (!extra) return sanitizeMetadata(base || {});
+  return sanitizeMetadata({
     title: extra.title || base.title || "",
     doi: extra.doi || base.doi || "",
     year: extra.year || base.year || "",
     venue: extra.venue || base.venue || "",
-    authors: extra.authors?.length ? extra.authors : base.authors || [],
-  };
+    authors: extra.authors?.length ? normalizeAuthors(extra.authors) : normalizeAuthors(base.authors),
+  });
 }
 
 app.post("/api/upload", upload.single("file"), async (req, res) => {
@@ -190,8 +226,8 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
         return res.json({
           paper_id: existing.paper_id,
           metadata,
-          doc: existingPaper.doc,
-          tei_xml: existingPaper.teiXml,
+          doc: null,
+          tei_xml: "",
           annotation: existingPaper.annotation,
           pdf_hash: pdfHash,
           existing: true,
@@ -205,21 +241,9 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
     const pdfPath = paperPath(paperId, "pdf");
     fs.renameSync(tempPath, pdfPath);
 
-    let teiXml = "";
-    try {
-      teiXml = await callGrobid(pdfPath);
-    } catch (err) {
-      teiXml = `<?xml version=\"1.0\"?><TEI><text><body><p>Grobid failed: ${err.message}</p></body></text></TEI>`;
-    }
-
-    fs.writeFileSync(paperPath(paperId, "tei.xml"), teiXml, "utf8");
-
-    const { metadata: extractedMetadata, doc } = teiToDoc(teiXml);
+    const extractedMetadata = await extractPdfMetadata(pdfPath);
     const crossref = await fetchCrossref(extractedMetadata).catch(() => null);
     const metadata = mergeMetadata(extractedMetadata, crossref);
-
-    const md = docToMarkdown(doc);
-    fs.writeFileSync(paperPath(paperId, "md"), md, "utf8");
 
     index.items[pdfHash] = {
       paper_id: paperId,
@@ -231,8 +255,8 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
     res.json({
       paper_id: paperId,
       metadata,
-      doc,
-      tei_xml: teiXml,
+      doc: null,
+      tei_xml: "",
       annotation: null,
       pdf_hash: pdfHash,
       existing: false,
@@ -257,8 +281,8 @@ app.get("/api/paper/:id", (req, res) => {
     res.json({
       paper_id: paperId,
       metadata,
-      doc: loaded.doc,
-      tei_xml: loaded.teiXml,
+      doc: null,
+      tei_xml: "",
       annotation: loaded.annotation,
     });
   } catch (err) {
@@ -285,10 +309,11 @@ app.post("/api/annotation/:id", (req, res) => {
     const paperId = req.params.id;
     const payload = req.body || {};
     const now = new Date().toISOString();
+    const metadata = sanitizeMetadata(payload.metadata || {});
     const out = {
       paper_id: paperId,
       schema_version: "0.1",
-      metadata: payload.metadata || {},
+      metadata,
       metadata_checks: payload.metadata_checks || {},
       concepts: payload.concepts || [],
       arguments: payload.arguments || [],
@@ -303,13 +328,13 @@ app.post("/api/annotation/:id", (req, res) => {
     const index = loadIndex();
     const hash = String(payload.pdf_hash || "").trim();
     if (hash && index.items?.[hash]) {
-      index.items[hash].metadata = payload.metadata || {};
+      index.items[hash].metadata = metadata;
     } else {
       const items = index.items || {};
       Object.keys(items).forEach((key) => {
         const entry = items[key];
         if (entry?.paper_id === paperId) {
-          items[key].metadata = payload.metadata || {};
+          items[key].metadata = metadata;
         }
       });
     }
@@ -399,20 +424,23 @@ app.get("/api/papers", (req, res) => {
   try {
     const index = loadIndex();
     const items = [];
+    const indexItems = index.items || {};
 
-    const hashes = Object.keys(index.items || {});
+    const hashes = Object.keys(indexItems);
     if (hashes.length === 0) {
       const files = fs.readdirSync(DATASET_DIR);
       files
-        .filter((file) => file.endsWith(".tei.xml"))
+        .filter((file) => file.endsWith(".pdf"))
         .forEach((file) => {
-          const paperId = file.replace(".tei.xml", "");
+          const paperId = file.replace(".pdf", "");
           const loaded = loadPaper(paperId);
           if (!loaded) return;
+          const entry = findIndexEntryByPaperId(index, paperId);
+          const metadata = resolvePaperMetadata(loaded, entry?.metadata);
           items.push({
             paper_id: paperId,
             pdf_hash: "",
-            metadata: loaded.metadata,
+            metadata,
             concepts: loaded.annotation?.concepts || [],
             arguments: loaded.annotation?.arguments || [],
             descriptors: loaded.annotation?.descriptors || [],
@@ -421,7 +449,7 @@ app.get("/api/papers", (req, res) => {
         });
     } else {
       hashes.forEach((hash) => {
-        const entry = index.items[hash];
+        const entry = indexItems[hash];
         if (!entry?.paper_id) return;
         const loaded = loadPaper(entry.paper_id);
         if (!loaded) return;
