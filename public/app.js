@@ -2028,7 +2028,9 @@ async function renderDoc() {
   docView.innerHTML = '<p class="muted">Loading PDF...</p>';
 
   try {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = withBase("/pdfjs/build/pdf.worker.js");
+    if (pdfjsLib.GlobalWorkerOptions) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = withBase("/pdfjs/pdf.worker.js");
+    }
     const loadingTask = pdfjsLib.getDocument({
       url: withBase(`/api/paper/${state.paperId}/pdf`),
     });

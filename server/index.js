@@ -4,7 +4,14 @@ const crypto = require("crypto");
 const express = require("express");
 const multer = require("multer");
 const fetch = require("node-fetch");
-const pdfParse = require("pdf-parse");
+let pdfParse = null;
+try {
+  pdfParse = require("pdf-parse");
+} catch (err) {
+  console.warn(
+    '[startup] Optional dependency "pdf-parse" is missing. PDF metadata extraction will be skipped.'
+  );
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,6 +22,7 @@ const LLM_URL = process.env.LLM_URL || "http://localhost:1234/v1/chat/completion
 const LLM_MODEL = process.env.LLM_MODEL || "qwen2.5-7b-instruct-1m";
 const LLM_MODE = process.env.LLM_MODE || "chat";
 const BASE_PATH = (process.env.BASE_PATH || "/").replace(/\/?$/, "/");
+const PDFJS_DIR = path.join(__dirname, "..", "node_modules", "pdfjs-dist");
 
 app.use(express.json({ limit: "10mb" }));
 
@@ -41,6 +49,27 @@ function loadIndex() {
 function saveIndex(index) {
   fs.writeFileSync(INDEX_PATH, JSON.stringify(index, null, 2));
 }
+
+function resolveExistingFile(candidates) {
+  for (const filePath of candidates) {
+    if (fs.existsSync(filePath)) return filePath;
+  }
+  return null;
+}
+
+const PDFJS_MAIN_FILE = resolveExistingFile([
+  path.join(PDFJS_DIR, "build", "pdf.js"),
+  path.join(PDFJS_DIR, "build", "pdf.min.js"),
+  path.join(PDFJS_DIR, "legacy", "build", "pdf.js"),
+  path.join(PDFJS_DIR, "legacy", "build", "pdf.min.js"),
+]);
+
+const PDFJS_WORKER_FILE = resolveExistingFile([
+  path.join(PDFJS_DIR, "build", "pdf.worker.js"),
+  path.join(PDFJS_DIR, "build", "pdf.worker.min.js"),
+  path.join(PDFJS_DIR, "legacy", "build", "pdf.worker.js"),
+  path.join(PDFJS_DIR, "legacy", "build", "pdf.worker.min.js"),
+]);
 
 function hasMetadataObject(metadata) {
   return !!metadata && typeof metadata === "object" && !Array.isArray(metadata) && Object.keys(metadata).length > 0;
@@ -114,6 +143,16 @@ function renderIndex(res) {
 app.get("/", (req, res) => renderIndex(res));
 app.get("/index.html", (req, res) => renderIndex(res));
 
+app.get("/pdfjs/pdf.js", (req, res) => {
+  if (!PDFJS_MAIN_FILE) return res.status(404).send("pdf.js not found");
+  res.type("application/javascript").sendFile(PDFJS_MAIN_FILE);
+});
+
+app.get("/pdfjs/pdf.worker.js", (req, res) => {
+  if (!PDFJS_WORKER_FILE) return res.status(404).send("pdf.worker.js not found");
+  res.type("application/javascript").sendFile(PDFJS_WORKER_FILE);
+});
+
 app.use(express.static(path.join(__dirname, "..", "public")));
 app.use("/pdfjs", express.static(path.join(__dirname, "..", "node_modules", "pdfjs-dist")));
 
@@ -128,6 +167,7 @@ function randomId() {
 
 async function extractPdfMetadata(pdfPath) {
   const fallback = { title: "", doi: "", year: "", venue: "", authors: [] };
+  if (!pdfParse) return fallback;
   try {
     const buffer = fs.readFileSync(pdfPath);
     const parsed = await pdfParse(buffer);
