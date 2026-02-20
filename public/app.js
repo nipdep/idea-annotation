@@ -41,6 +41,7 @@ const state = {
   metadata: {},
   metadataChecks: {},
   annotations: { concepts: [], arguments: [], descriptors: [], created_at: null },
+  localPdfUrl: "",
   highlights: [],
   pendingSelection: null,
   argumentDescription: "",
@@ -77,6 +78,69 @@ function withBase(path) {
   const base = (BASE_PATH || "/").replace(/\/$/, "");
   const clean = path.startsWith("/") ? path : `/${path}`;
   return `${base}${clean}` || clean;
+}
+
+function revokeLocalPdfUrl() {
+  if (state.localPdfUrl && state.localPdfUrl.startsWith("blob:")) {
+    URL.revokeObjectURL(state.localPdfUrl);
+  }
+  state.localPdfUrl = "";
+}
+
+function setLocalPdfUrlFromFile(file) {
+  revokeLocalPdfUrl();
+  if (!file) return;
+  state.localPdfUrl = URL.createObjectURL(file);
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[data-pdfjs-src="${src}"]`);
+    if (existing) {
+      if (window.pdfjsLib) resolve(true);
+      existing.addEventListener("load", () => resolve(true), { once: true });
+      existing.addEventListener("error", () => reject(new Error(`Failed to load ${src}`)), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.dataset.pdfjsSrc = src;
+    script.onload = () => resolve(true);
+    script.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(script);
+  });
+}
+
+async function ensurePdfJsLoaded() {
+  if (window.pdfjsLib && typeof window.pdfjsLib.getDocument === "function") {
+    return window.pdfjsLib;
+  }
+
+  const candidates = [
+    withBase("/pdfjs/pdf.js"),
+    withBase("/pdfjs/build/pdf.js"),
+    withBase("/pdfjs/legacy/build/pdf.js"),
+    "/pdfjs/pdf.js",
+    "/pdfjs/build/pdf.js",
+    "/pdfjs/legacy/build/pdf.js",
+  ];
+
+  const errors = [];
+  for (const src of candidates) {
+    try {
+      await loadScript(src);
+      if (window.pdfjsLib && typeof window.pdfjsLib.getDocument === "function") {
+        return window.pdfjsLib;
+      }
+      errors.push(`${src}: loaded but pdfjsLib missing`);
+    } catch (err) {
+      errors.push(`${src}: ${err.message}`);
+    }
+  }
+
+  throw new Error(errors.join(" | "));
 }
 
 function setHint(message) {
@@ -2019,22 +2083,35 @@ async function renderDoc() {
     return;
   }
 
-  const pdfjsLib = window.pdfjsLib;
-  if (!pdfjsLib || typeof pdfjsLib.getDocument !== "function") {
-    docView.innerHTML = '<p class="muted">PDF.js failed to load.</p>';
-    return;
-  }
-
   docView.innerHTML = '<p class="muted">Loading PDF...</p>';
 
   try {
+    const pdfjsLib = await ensurePdfJsLoaded();
     if (pdfjsLib.GlobalWorkerOptions) {
       pdfjsLib.GlobalWorkerOptions.workerSrc = withBase("/pdfjs/pdf.worker.js");
     }
-    const loadingTask = pdfjsLib.getDocument({
-      url: withBase(`/api/paper/${state.paperId}/pdf`),
-    });
-    const pdf = await loadingTask.promise;
+
+    const sourceCandidates = [
+      state.localPdfUrl,
+      withBase(`/api/paper/${state.paperId}/pdf`),
+      `/api/paper/${state.paperId}/pdf`,
+    ].filter(Boolean);
+
+    let pdf = null;
+    let lastSourceError = "";
+    for (const sourceUrl of sourceCandidates) {
+      try {
+        const loadingTask = pdfjsLib.getDocument({ url: sourceUrl });
+        pdf = await loadingTask.promise;
+        break;
+      } catch (sourceErr) {
+        lastSourceError = `${sourceUrl} -> ${sourceErr.message}`;
+      }
+    }
+
+    if (!pdf) {
+      throw new Error(lastSourceError || "No PDF source available");
+    }
     if (renderSeq !== state.pdfRenderSeq) return;
 
     docView.innerHTML = "";
@@ -2092,7 +2169,7 @@ async function renderDoc() {
       }
     }
   } catch (err) {
-    docView.innerHTML = '<p class="muted">PDF viewer failed to load.</p>';
+    docView.innerHTML = `<p class="muted">PDF viewer failed to load: ${err.message}</p>`;
     showToast(`PDF load failed: ${err.message}`, "error");
   }
 }
@@ -2620,6 +2697,7 @@ async function uploadPdf() {
     showToast("Choose a PDF first.", "error");
     return;
   }
+  setLocalPdfUrlFromFile(file);
 
   const form = new FormData();
   form.append("file", file);
@@ -2786,6 +2864,7 @@ function init() {
   wireSelectionMenu();
 
   el("uploadBtn").addEventListener("click", uploadPdf);
+  window.addEventListener("beforeunload", revokeLocalPdfUrl);
   el("docView").addEventListener("mouseup", handleDocSelection);
   el("docView").addEventListener("keyup", handleDocSelection);
   el("addConceptBtn").addEventListener("click", createConcept);
