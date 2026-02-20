@@ -824,6 +824,23 @@ textarea[readonly] {
   pointer-events: auto;
 }
 
+.pdf-highlight-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.pdf-highlight-fragment {
+  position: absolute;
+  border-radius: 2px;
+  background: rgba(238, 207, 127, 0.55);
+}
+
+.pdf-highlight-fragment.ia-highlight-used {
+  background: rgba(103, 170, 126, 0.45);
+}
+
 .pdf-text-layer span,
 .pdf-text-layer br {
   color: transparent;
@@ -839,14 +856,6 @@ textarea[readonly] {
   background: rgba(204, 113, 70, 0.35);
 }
 
-.pdf-text-layer .ia-highlight {
-  border-radius: 2px;
-  background: rgba(238, 207, 127, 0.55);
-}
-
-.pdf-text-layer .ia-highlight.ia-highlight-used {
-  background: rgba(103, 170, 126, 0.45);
-}
 .tei-doc {
   background: #fff;
   border-radius: 12px;

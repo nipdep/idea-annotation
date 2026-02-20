@@ -361,6 +361,52 @@ function getSelectionContext(range) {
   };
 }
 
+function findPageElementFromPoint(clientX, clientY) {
+  const elements = document.elementsFromPoint(clientX, clientY) || [];
+  for (const node of elements) {
+    if (!(node instanceof Element)) continue;
+    const page = node.classList.contains("pdf-page") ? node : node.closest(".pdf-page");
+    if (page) return page;
+  }
+  return null;
+}
+
+function buildRectAnchorFromRange(range) {
+  const rects = Array.from(range.getClientRects()).filter(
+    (rect) => rect.width > 1 && rect.height > 1
+  );
+  if (!rects.length) return null;
+
+  const fragments = [];
+  rects.forEach((rect) => {
+    const sampleX = rect.left + Math.min(rect.width * 0.5, 2);
+    const sampleY = rect.top + Math.min(rect.height * 0.5, 2);
+    const pageEl = findPageElementFromPoint(sampleX, sampleY);
+    if (!pageEl) return;
+    const pageRect = pageEl.getBoundingClientRect();
+    const pageWidth = pageEl.clientWidth || pageRect.width || 1;
+    const pageHeight = pageEl.clientHeight || pageRect.height || 1;
+    const x = Math.max(0, rect.left - pageRect.left);
+    const y = Math.max(0, rect.top - pageRect.top);
+    const width = Math.max(1, rect.width);
+    const height = Math.max(1, rect.height);
+    fragments.push({
+      page: String(pageEl.dataset.page || ""),
+      x,
+      y,
+      width,
+      height,
+      xRatio: x / pageWidth,
+      yRatio: y / pageHeight,
+      widthRatio: width / pageWidth,
+      heightRatio: height / pageHeight,
+    });
+  });
+
+  if (!fragments.length) return null;
+  return { kind: "rects", fragments };
+}
+
 function showSelectionMenu(rect) {
   const menu = el("selectionMenu");
   if (!menu) return;
@@ -413,64 +459,108 @@ function handleDocSelection() {
 
     const context = getSelectionContext(range);
     const text = selection.toString().trim();
-    const spans = getSelectedPdfSpans(range);
-    if (!context || !text || spans.length === 0) {
+    if (!context || !text) {
+      state.pendingSelection = null;
+      hideSelectionMenu();
+      return;
+    }
+
+    const anchor = buildRectAnchorFromRange(range);
+    if (!anchor?.fragments?.length) {
       state.pendingSelection = null;
       hideSelectionMenu();
       return;
     }
 
     state.pendingSelection = {
+      range: range.cloneRange(),
       text,
       section: context.section,
       page: context.page,
-      spans,
+      anchor,
     };
     showSelectionMenu(range.getBoundingClientRect());
   });
 }
 
-function getSelectedPdfSpans(selectionRange) {
-  const docView = el("docView");
-  if (!docView) return [];
-  const spans = Array.from(docView.querySelectorAll(".pdf-text-layer span"));
-  return spans.filter((span) => {
-    if (!span.textContent?.trim()) return false;
-    try {
-      return selectionRange.intersectsNode(span);
-    } catch {
-      return false;
-    }
-  });
+function ensurePageHighlightLayer(pageEl) {
+  if (!pageEl) return null;
+  let layer = pageEl.querySelector(".pdf-highlight-layer");
+  if (layer) return layer;
+  layer = document.createElement("div");
+  layer.className = "pdf-highlight-layer";
+  pageEl.appendChild(layer);
+  return layer;
 }
 
-function applySpanHighlight(id, spans) {
-  spans.forEach((span) => {
-    const current = (span.dataset.highlightIds || "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
-    if (!current.includes(id)) current.push(id);
-    span.dataset.highlightIds = current.join(",");
-    refreshSpanHighlightState(span);
-  });
+function normalizeRectAnchor(anchor) {
+  if (!anchor || typeof anchor !== "object") return null;
+  if (anchor.kind !== "rects" || !Array.isArray(anchor.fragments)) return null;
+  const fragments = anchor.fragments
+    .map((fragment) => {
+      const page = String(fragment?.page || "").trim();
+      if (!page) return null;
+      const xRatio = Number(fragment?.xRatio);
+      const yRatio = Number(fragment?.yRatio);
+      const widthRatio = Number(fragment?.widthRatio);
+      const heightRatio = Number(fragment?.heightRatio);
+      const x = Number(fragment?.x);
+      const y = Number(fragment?.y);
+      const width = Number(fragment?.width);
+      const height = Number(fragment?.height);
+      return {
+        page,
+        xRatio: Number.isFinite(xRatio) ? xRatio : null,
+        yRatio: Number.isFinite(yRatio) ? yRatio : null,
+        widthRatio: Number.isFinite(widthRatio) ? widthRatio : null,
+        heightRatio: Number.isFinite(heightRatio) ? heightRatio : null,
+        x: Number.isFinite(x) ? x : null,
+        y: Number.isFinite(y) ? y : null,
+        width: Number.isFinite(width) ? width : null,
+        height: Number.isFinite(height) ? height : null,
+      };
+    })
+    .filter(Boolean);
+  if (!fragments.length) return null;
+  return { kind: "rects", fragments };
 }
 
-function refreshSpanHighlightState(span) {
-  const ids = (span.dataset.highlightIds || "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
-  if (!ids.length) {
-    span.classList.remove("ia-highlight", "ia-highlight-used");
-    delete span.dataset.highlightIds;
-    return;
-  }
-  const related = ids
-    .map((id) => state.highlights.find((hl) => hl.id === id))
-    .filter(Boolean);
-  span.classList.toggle("ia-highlight", related.length > 0);
-  span.classList.toggle("ia-highlight-used", related.some((hl) => hl.used));
+function syncOverlayUsedState(overlay, used) {
+  overlay.classList.toggle("ia-highlight-used", !!used);
+}
+
+function renderHighlightOverlayForId(highlightId) {
+  const highlight = state.highlights.find((hl) => hl.id === highlightId);
+  if (!highlight || highlight.virtual) return;
+  const rectAnchor = normalizeRectAnchor(highlight.anchor);
+  if (!rectAnchor) return;
+
+  rectAnchor.fragments.forEach((fragment, index) => {
+    const pageEl = document.querySelector(`.pdf-page[data-page="${fragment.page}"]`);
+    if (!pageEl) return;
+    const layer = ensurePageHighlightLayer(pageEl);
+    if (!layer) return;
+
+    const pageWidth = pageEl.clientWidth || 1;
+    const pageHeight = pageEl.clientHeight || 1;
+    const left = fragment.xRatio != null ? fragment.xRatio * pageWidth : fragment.x || 0;
+    const top = fragment.yRatio != null ? fragment.yRatio * pageHeight : fragment.y || 0;
+    const width =
+      fragment.widthRatio != null ? fragment.widthRatio * pageWidth : fragment.width || 1;
+    const height =
+      fragment.heightRatio != null ? fragment.heightRatio * pageHeight : fragment.height || 1;
+
+    const overlay = document.createElement("div");
+    overlay.className = "pdf-highlight-fragment";
+    overlay.dataset.hid = highlightId;
+    overlay.dataset.fragment = String(index);
+    overlay.style.left = `${Math.max(0, left)}px`;
+    overlay.style.top = `${Math.max(0, top)}px`;
+    overlay.style.width = `${Math.max(1, width)}px`;
+    overlay.style.height = `${Math.max(1, height)}px`;
+    syncOverlayUsedState(overlay, highlight.used);
+    layer.appendChild(overlay);
+  });
 }
 
 function commitPendingHighlight(target) {
@@ -482,18 +572,7 @@ function commitPendingHighlight(target) {
 
   try {
     const id = nextHighlightId();
-    const spanIndexes = (pending.spans || [])
-      .map((span) => Number(span.dataset.spanIndex))
-      .filter((value) => Number.isFinite(value));
-    const firstPage = (pending.spans || [])[0]?.closest(".pdf-page")?.dataset?.page || pending.page || "";
-    const anchor =
-      firstPage && spanIndexes.length
-        ? {
-            page: String(firstPage),
-            start: Math.min(...spanIndexes),
-            end: Math.max(...spanIndexes),
-          }
-        : null;
+    const anchor = pending.anchor || (pending.range ? buildRectAnchorFromRange(pending.range) : null);
     state.highlights.push({
       id,
       text: pending.text,
@@ -503,7 +582,7 @@ function commitPendingHighlight(target) {
       target,
       anchor,
     });
-    applySpanHighlight(id, pending.spans || []);
+    renderHighlightOverlayForId(id);
 
     if (target === "argument") {
       state.highlightSelection.argument.add(id);
@@ -600,16 +679,27 @@ function normalizeAnnotations(annotation) {
 }
 
 function normalizeAnchor(anchor) {
-  if (!anchor || typeof anchor !== "object") return null;
-  const page = String(anchor.page || "").trim();
-  const start = Number(anchor.start);
-  const end = Number(anchor.end);
-  if (!page || !Number.isFinite(start) || !Number.isFinite(end)) return null;
-  return {
-    page,
-    start: Math.max(0, Math.floor(start)),
-    end: Math.max(0, Math.floor(end)),
-  };
+  return normalizeRectAnchor(anchor);
+}
+
+function anchorKey(anchor) {
+  const rect = normalizeRectAnchor(anchor);
+  if (!rect) return "";
+  return rect.fragments
+    .map((fragment) =>
+      [
+        fragment.page,
+        fragment.xRatio != null ? fragment.xRatio.toFixed(6) : Number(fragment.x || 0).toFixed(2),
+        fragment.yRatio != null ? fragment.yRatio.toFixed(6) : Number(fragment.y || 0).toFixed(2),
+        fragment.widthRatio != null
+          ? fragment.widthRatio.toFixed(6)
+          : Number(fragment.width || 0).toFixed(2),
+        fragment.heightRatio != null
+          ? fragment.heightRatio.toFixed(6)
+          : Number(fragment.height || 0).toFixed(2),
+      ].join(":")
+    )
+    .join("|");
 }
 
 function parsePageNumber(value) {
@@ -629,7 +719,8 @@ function hydrateHighlightsFromAnnotations() {
   const addHighlight = (target, ref, fallbackText = "") => {
     if (!ref) return;
     const anchor = normalizeAnchor(ref.anchor);
-    const page = parsePageNumber(ref.page) || anchor?.page || "";
+    const anchorPage = anchor?.fragments?.[0]?.page || "";
+    const page = parsePageNumber(ref.page) || anchorPage || "";
     const section = String(ref.section || (page ? `Page ${page}` : "PDF")).trim();
     const text = String(ref.text || fallbackText || "").trim();
     const id = `H${++seq}`;
@@ -669,30 +760,11 @@ function hydrateHighlightsFromAnnotations() {
   state.highlights = hydrated;
 }
 
-function spansFromAnchor(anchor) {
-  const normalized = normalizeAnchor(anchor);
-  if (!normalized) return [];
-  const pageEl = document.querySelector(`.pdf-page[data-page="${normalized.page}"]`);
-  if (!pageEl) return [];
-  const spans = Array.from(pageEl.querySelectorAll(".pdf-text-layer span[data-span-index]"));
-  if (!spans.length) return [];
-  const start = Math.max(0, Math.min(normalized.start, spans.length - 1));
-  const end = Math.max(start, Math.min(normalized.end, spans.length - 1));
-  return spans.slice(start, end + 1).filter((span) => span.textContent?.trim());
-}
-
 function applySavedHighlightsToPdf() {
-  const spans = document.querySelectorAll(".pdf-text-layer span[data-highlight-ids]");
-  spans.forEach((span) => {
-    delete span.dataset.highlightIds;
-    refreshSpanHighlightState(span);
-  });
-
+  document.querySelectorAll(".pdf-highlight-layer").forEach((layer) => layer.remove());
   state.highlights.forEach((hl) => {
     if (hl.virtual) return;
-    const targetSpans = spansFromAnchor(hl.anchor);
-    if (!targetSpans.length) return;
-    applySpanHighlight(hl.id, targetSpans);
+    renderHighlightOverlayForId(hl.id);
   });
 }
 
@@ -2323,10 +2395,6 @@ async function renderDoc() {
       if (textRender?.promise) {
         await textRender.promise;
       }
-      const textSpans = Array.from(textLayer.querySelectorAll("span"));
-      textSpans.forEach((span, index) => {
-        span.dataset.spanIndex = String(index);
-      });
     }
     applySavedHighlightsToPdf();
   } catch (err) {
@@ -2405,21 +2473,7 @@ function renderHighlightPickers() {
 }
 
 function removeHighlight(id) {
-  const spans = document.querySelectorAll(".pdf-text-layer span[data-highlight-ids]");
-  spans.forEach((span) => {
-    const ids = (span.dataset.highlightIds || "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
-    if (!ids.includes(id)) return;
-    const next = ids.filter((value) => value !== id);
-    if (next.length) {
-      span.dataset.highlightIds = next.join(",");
-    } else {
-      delete span.dataset.highlightIds;
-    }
-    refreshSpanHighlightState(span);
-  });
+  document.querySelectorAll(`.pdf-highlight-fragment[data-hid="${id}"]`).forEach((node) => node.remove());
   state.highlights = state.highlights.filter((h) => h.id !== id);
   state.highlightSelection.concept.delete(id);
   state.highlightSelection.argument.delete(id);
@@ -2436,14 +2490,9 @@ function consumeHighlights(ids) {
     state.highlightSelection.concept.delete(id);
     state.highlightSelection.argument.delete(id);
     state.highlightSelection.descriptor.delete(id);
-    const spans = document.querySelectorAll(".pdf-text-layer span[data-highlight-ids]");
-    spans.forEach((span) => {
-      const related = (span.dataset.highlightIds || "")
-        .split(",")
-        .map((value) => value.trim())
-        .filter(Boolean);
-      if (related.includes(id)) refreshSpanHighlightState(span);
-    });
+    document
+      .querySelectorAll(`.pdf-highlight-fragment[data-hid="${id}"]`)
+      .forEach((node) => syncOverlayUsedState(node, true));
   });
   updateDescription("argument");
 }
@@ -2465,18 +2514,15 @@ function removeHighlightsForSourceRefs(target, sourceRefs) {
   const consumedIds = [];
   sourceRefs.forEach((ref) => {
     const refAnchor = normalizeAnchor(ref?.anchor);
+    const refAnchorKey = anchorKey(refAnchor);
     const section = normalizeSourceRefValue(ref?.section, "Body");
     const page = normalizeSourceRefValue(ref?.page, "");
     const text = normalizeSourceRefValue(ref?.text, "");
     const match = pool.find((hl) => {
       if (consumedIds.includes(hl.id)) return false;
       const hlAnchor = normalizeAnchor(hl.anchor);
-      if (refAnchor && hlAnchor) {
-        return (
-          hlAnchor.page === refAnchor.page &&
-          hlAnchor.start === refAnchor.start &&
-          hlAnchor.end === refAnchor.end
-        );
+      if (refAnchor && hlAnchor && refAnchorKey) {
+        return anchorKey(hlAnchor) === refAnchorKey;
       }
       const hlSection = normalizeSourceRefValue(hl.section, "Body");
       const hlPage = normalizeSourceRefValue(hl.page, "");
@@ -3050,7 +3096,6 @@ function init() {
   el("docView").addEventListener("mouseup", handleDocSelection);
   el("docView").addEventListener("touchend", handleDocSelection);
   el("docView").addEventListener("keyup", handleDocSelection);
-  document.addEventListener("selectionchange", handleDocSelection);
   el("addConceptBtn").addEventListener("click", createConcept);
   el("addArgumentBtn").addEventListener("click", createArgument);
   el("addDescriptorBtn").addEventListener("click", createDescriptor);
