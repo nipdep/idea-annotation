@@ -50,8 +50,11 @@ const state = {
   pdfHash: "",
   metadata: {},
   metadataChecks: {},
+  doc: null,
+  teiXml: "",
   annotations: { concepts: [], arguments: [], descriptors: [], created_at: null },
   localPdfUrl: "",
+  docMode: "pdf",
   highlights: [],
   pendingSelection: null,
   argumentDescription: "",
@@ -192,6 +195,25 @@ async function ensurePdfJsLoaded() {
   }
 
   throw new Error(errors.join(" | "));
+}
+
+function updateDocSwapButton() {
+  const button = el("docSwapBtn");
+  if (!button) return;
+
+  const canSwap = !!state.paperId && !!state.doc;
+  button.disabled = !canSwap;
+  button.style.display = state.paperId ? "inline-flex" : "none";
+
+  if (!canSwap) {
+    button.title = "Parsed view unavailable";
+    button.setAttribute("aria-label", "Parsed view unavailable");
+    return;
+  }
+
+  const label = state.docMode === "pdf" ? "Show parsed view" : "Show PDF view";
+  button.title = label;
+  button.setAttribute("aria-label", label);
 }
 
 function setHint(message) {
@@ -459,6 +481,12 @@ function hideSelectionMenu() {
 function handleDocSelection() {
   // Let the browser finish selection updates before reading the range.
   requestAnimationFrame(() => {
+    if (state.docMode !== "pdf") {
+      state.pendingSelection = null;
+      hideSelectionMenu();
+      return;
+    }
+
     const docView = el("docView");
     if (!docView) return;
     const selection = window.getSelection();
@@ -2568,7 +2596,106 @@ function renderMetadata() {
   });
 }
 
-async function renderDoc() {
+function renderParsedDoc() {
+  const docView = el("docView");
+  if (!docView) return;
+  state.pdfRenderSeq += 1;
+  docView.innerHTML = "";
+
+  if (!state.paperId) {
+    docView.innerHTML = '<p class="muted">Upload a paper to begin.</p>';
+    return;
+  }
+
+  const doc = state.doc;
+  if (!doc) {
+    docView.innerHTML = '<p class="muted">Parsed document view is unavailable for this paper.</p>';
+    return;
+  }
+
+  const wrapper = document.createElement("article");
+  wrapper.className = "tei-doc";
+
+  if (state.metadata.title) {
+    const header = document.createElement("div");
+    header.className = "tei-header";
+
+    const title = document.createElement("h3");
+    title.className = "tei-title";
+    title.textContent = state.metadata.title;
+    header.appendChild(title);
+
+    if (Array.isArray(state.metadata.authors) && state.metadata.authors.length) {
+      const authors = document.createElement("div");
+      authors.className = "tei-authors";
+      authors.textContent = state.metadata.authors.join(", ");
+      header.appendChild(authors);
+    }
+
+    wrapper.appendChild(header);
+  }
+
+  const abstract = Array.isArray(doc.abstract) ? doc.abstract : [];
+  if (abstract.length) {
+    const abstractBlock = document.createElement("section");
+    abstractBlock.className = "tei-abstract";
+    const heading = document.createElement("h3");
+    heading.textContent = "Abstract";
+    abstractBlock.appendChild(heading);
+
+    abstract.forEach((paragraph) => {
+      const p = document.createElement("p");
+      p.className = "doc-paragraph";
+      p.textContent = paragraph;
+      abstractBlock.appendChild(p);
+    });
+
+    wrapper.appendChild(abstractBlock);
+  }
+
+  const sections = Array.isArray(doc.sections) ? doc.sections : [];
+  sections.forEach((section, index) => {
+    const sectionEl = document.createElement("section");
+    sectionEl.className = "tei-section";
+
+    const heading = document.createElement("h3");
+    heading.textContent = section.title || `Section ${index + 1}`;
+    sectionEl.appendChild(heading);
+
+    (section.paragraphs || []).forEach((paragraph) => {
+      const p = document.createElement("p");
+      p.className = "doc-paragraph";
+      p.textContent = paragraph;
+      sectionEl.appendChild(p);
+    });
+
+    wrapper.appendChild(sectionEl);
+  });
+
+  const references = Array.isArray(doc.references) ? doc.references : [];
+  if (references.length) {
+    const refs = document.createElement("section");
+    refs.className = "tei-bibl";
+
+    const heading = document.createElement("h3");
+    heading.className = "tei-section-heading";
+    heading.textContent = "References";
+    refs.appendChild(heading);
+
+    references.forEach((entry) => {
+      const p = document.createElement("p");
+      p.className = "doc-paragraph";
+      p.textContent = entry;
+      refs.appendChild(p);
+    });
+
+    wrapper.appendChild(refs);
+  }
+
+  docView.appendChild(wrapper);
+}
+
+async function renderPdfDoc() {
   const docView = el("docView");
   if (!docView) return;
   const renderSeq = ++state.pdfRenderSeq;
@@ -2611,9 +2738,9 @@ async function renderDoc() {
     if (renderSeq !== state.pdfRenderSeq) return;
 
     docView.innerHTML = "";
-    const doc = document.createElement("div");
-    doc.className = "pdf-doc";
-    docView.appendChild(doc);
+    const pdfDoc = document.createElement("div");
+    pdfDoc.className = "pdf-doc";
+    docView.appendChild(pdfDoc);
 
     const availableWidth = Math.max(320, docView.clientWidth - 40);
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
@@ -2646,7 +2773,7 @@ async function renderDoc() {
 
       pageEl.appendChild(canvas);
       pageEl.appendChild(textLayer);
-      doc.appendChild(pageEl);
+      pdfDoc.appendChild(pageEl);
 
       await page.render({
         canvasContext: canvas.getContext("2d"),
@@ -2669,6 +2796,25 @@ async function renderDoc() {
     docView.innerHTML = `<p class="muted">PDF viewer failed to load: ${err.message}</p>`;
     showToast(`PDF load failed: ${err.message}`, "error");
   }
+}
+
+async function renderDoc() {
+  const docView = el("docView");
+  if (docView) {
+    docView.classList.toggle("pdf-viewer", state.docMode === "pdf");
+  }
+  updateDocSwapButton();
+  if (state.docMode === "text") {
+    renderParsedDoc();
+    return;
+  }
+  await renderPdfDoc();
+}
+
+function toggleDocMode() {
+  if (!state.paperId || !state.doc) return;
+  state.docMode = state.docMode === "pdf" ? "text" : "pdf";
+  renderDoc();
 }
 
 function renderHighlightPickers() {
@@ -3226,8 +3372,11 @@ async function uploadPdf() {
   state.paperId = data.paper_id;
   state.pdfHash = data.pdf_hash || "";
   state.metadata = data.metadata || {};
+  state.doc = data.doc || null;
+  state.teiXml = data.tei_xml || "";
   state.annotations = normalizeAnnotations(data.annotation);
   state.metadataChecks = data.annotation?.metadata_checks || {};
+  state.docMode = "pdf";
   state.highlights = [];
   state.virtualHighlightSeq = 0;
   state.argumentDescription = "";
@@ -3400,6 +3549,11 @@ function init() {
       if (!page) return;
       page.classList.toggle("doc-expanded");
     });
+  }
+
+  const docSwapBtn = el("docSwapBtn");
+  if (docSwapBtn) {
+    docSwapBtn.addEventListener("click", toggleDocMode);
   }
 }
 

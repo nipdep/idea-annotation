@@ -449,16 +449,21 @@ button:hover {
   justify-content: center;
 }
 
-.icon-btn::before {
+#docExpandBtn::before {
   content: "+";
 }
 
-#annotatorPage.doc-expanded .icon-btn::before {
+#annotatorPage.doc-expanded #docExpandBtn::before {
   content: "-";
 }
 
 #docExpandBtn {
   display: none;
+}
+
+#docSwapBtn::before {
+  content: "⇄";
+  font-size: 15px;
 }
 
 .doc-panel .panel-header {
@@ -904,6 +909,15 @@ textarea[readonly] {
   font-size: 15px;
   letter-spacing: 0.08em;
   margin: 14px 0 6px;
+  text-transform: uppercase;
+}
+
+.tei-bibl h3 {
+  font-family: "Avenir Next", "Avenir", "Trebuchet MS", "Verdana", sans-serif;
+  color: var(--accent-2);
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  margin: 0 0 8px;
   text-transform: uppercase;
 }
 

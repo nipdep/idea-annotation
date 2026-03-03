@@ -4,6 +4,8 @@ const crypto = require("crypto");
 const express = require("express");
 const multer = require("multer");
 const fetch = require("node-fetch");
+const FormData = require("form-data");
+const { teiToDoc, docToMarkdown } = require("./tei");
 let pdfParse = null;
 try {
   pdfParse = require("pdf-parse");
@@ -18,6 +20,7 @@ const PORT = process.env.PORT || 3000;
 const DATASET_DIR = path.join(__dirname, "..", "dataset", "papers");
 const TMP_DIR = path.join(__dirname, "..", "tmp");
 const INDEX_PATH = path.join(DATASET_DIR, "index.json");
+const GROBID_URL = process.env.GROBID_URL || "http://localhost:8070";
 const LLM_URL = process.env.LLM_URL || "http://localhost:1234/v1/chat/completions";
 const LLM_MODEL = process.env.LLM_MODEL || "qwen2.5-7b-instruct-1m";
 const LLM_MODE = process.env.LLM_MODE || "chat";
@@ -123,14 +126,32 @@ function hashFile(filePath) {
 function loadPaper(paperId) {
   const pdfPath = paperPath(paperId, "pdf");
   const jsonPath = paperPath(paperId, "json");
+  const teiPath = paperPath(paperId, "tei.xml");
 
   if (!fs.existsSync(pdfPath)) return null;
   const annotation = fs.existsSync(jsonPath)
     ? JSON.parse(fs.readFileSync(jsonPath, "utf8"))
     : null;
-  const metadata = hasMetadataObject(annotation?.metadata) ? annotation.metadata : {};
+  let teiXml = "";
+  let extractedMetadata = {};
+  let doc = null;
 
-  return { metadata, annotation };
+  if (fs.existsSync(teiPath)) {
+    teiXml = fs.readFileSync(teiPath, "utf8");
+    try {
+      const parsed = teiToDoc(teiXml);
+      extractedMetadata = parsed.metadata || {};
+      doc = parsed.doc || null;
+    } catch (err) {
+      console.warn(`[loadPaper] Failed to parse ${teiPath}: ${err.message}`);
+    }
+  }
+
+  const metadata = hasMetadataObject(annotation?.metadata)
+    ? annotation.metadata
+    : extractedMetadata;
+
+  return { pdfPath, metadata, extractedMetadata, annotation, teiXml, doc };
 }
 
 function renderIndex(res) {
@@ -163,6 +184,74 @@ function paperPath(paperId, ext) {
 function randomId() {
   const rand = Math.random().toString(36).slice(2, 8);
   return `paper_${Date.now()}_${rand}`;
+}
+
+async function callGrobid(pdfPath) {
+  const form = new FormData();
+  form.append("input", fs.createReadStream(pdfPath));
+  form.append("consolidateHeader", "1");
+
+  const res = await fetch(`${GROBID_URL}/api/processFulltextDocument`, {
+    method: "POST",
+    body: form,
+    headers: form.getHeaders(),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Grobid error: ${res.status} ${text}`);
+  }
+
+  return res.text();
+}
+
+function fallbackTeiXml(message = "Grobid parsing failed.") {
+  const safe = String(message || "Grobid parsing failed.")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return (
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<TEI><text><body><div><head>Parsed Output Unavailable</head><p>${safe}</p></div></body></text></TEI>`
+  );
+}
+
+async function ensureParsedArtifacts(paperId, pdfPath) {
+  const teiPath = paperPath(paperId, "tei.xml");
+  const mdPath = paperPath(paperId, "md");
+
+  if (fs.existsSync(teiPath)) {
+    const teiXml = fs.readFileSync(teiPath, "utf8");
+    try {
+      const parsed = teiToDoc(teiXml);
+      return {
+        teiXml,
+        extractedMetadata: parsed.metadata || {},
+        doc: parsed.doc || null,
+      };
+    } catch (err) {
+      console.warn(`[grobid] Stored TEI parse failed for ${paperId}: ${err.message}`);
+    }
+  }
+
+  let teiXml = "";
+  try {
+    teiXml = await callGrobid(pdfPath);
+  } catch (err) {
+    console.warn(`[grobid] ${paperId}: ${err.message}`);
+    teiXml = fallbackTeiXml(err.message);
+  }
+
+  fs.writeFileSync(teiPath, teiXml, "utf8");
+
+  const parsed = teiToDoc(teiXml);
+  fs.writeFileSync(mdPath, docToMarkdown(parsed.doc), "utf8");
+
+  return {
+    teiXml,
+    extractedMetadata: parsed.metadata || {},
+    doc: parsed.doc || null,
+  };
 }
 
 async function extractPdfMetadata(pdfPath) {
@@ -259,15 +348,27 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
     const existing = index.items?.[pdfHash];
 
     if (existing?.paper_id) {
-      const existingPaper = loadPaper(existing.paper_id);
+      let existingPaper = loadPaper(existing.paper_id);
       if (existingPaper) {
+        if (!existingPaper.doc) {
+          const parsed = await ensureParsedArtifacts(existing.paper_id, existingPaper.pdfPath);
+          existingPaper = {
+            ...existingPaper,
+            teiXml: parsed.teiXml,
+            extractedMetadata: parsed.extractedMetadata,
+            doc: parsed.doc,
+            metadata: hasMetadataObject(existingPaper.annotation?.metadata)
+              ? existingPaper.annotation.metadata
+              : parsed.extractedMetadata,
+          };
+        }
         fs.unlinkSync(tempPath);
         const metadata = resolvePaperMetadata(existingPaper, existing.metadata);
         return res.json({
           paper_id: existing.paper_id,
           metadata,
-          doc: null,
-          tei_xml: "",
+          doc: existingPaper.doc,
+          tei_xml: existingPaper.teiXml || "",
           annotation: existingPaper.annotation,
           pdf_hash: pdfHash,
           existing: true,
@@ -281,9 +382,11 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
     const pdfPath = paperPath(paperId, "pdf");
     fs.renameSync(tempPath, pdfPath);
 
+    const parsed = await ensureParsedArtifacts(paperId, pdfPath);
     const extractedMetadata = await extractPdfMetadata(pdfPath);
-    const crossref = await fetchCrossref(extractedMetadata).catch(() => null);
-    const metadata = mergeMetadata(extractedMetadata, crossref);
+    const baseMetadata = mergeMetadata(extractedMetadata, parsed.extractedMetadata);
+    const crossref = await fetchCrossref(baseMetadata).catch(() => null);
+    const metadata = mergeMetadata(baseMetadata, crossref);
 
     index.items[pdfHash] = {
       paper_id: paperId,
@@ -295,8 +398,8 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
     res.json({
       paper_id: paperId,
       metadata,
-      doc: null,
-      tei_xml: "",
+      doc: parsed.doc,
+      tei_xml: parsed.teiXml,
       annotation: null,
       pdf_hash: pdfHash,
       existing: false,
@@ -307,12 +410,24 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
   }
 });
 
-app.get("/api/paper/:id", (req, res) => {
+app.get("/api/paper/:id", async (req, res) => {
   try {
     const paperId = req.params.id;
-    const loaded = loadPaper(paperId);
+    let loaded = loadPaper(paperId);
     if (!loaded) {
       return res.status(404).json({ error: "Paper not found" });
+    }
+    if (!loaded.doc) {
+      const parsed = await ensureParsedArtifacts(paperId, loaded.pdfPath);
+      loaded = {
+        ...loaded,
+        teiXml: parsed.teiXml,
+        extractedMetadata: parsed.extractedMetadata,
+        doc: parsed.doc,
+        metadata: hasMetadataObject(loaded.annotation?.metadata)
+          ? loaded.annotation.metadata
+          : parsed.extractedMetadata,
+      };
     }
     const index = loadIndex();
     const entry = findIndexEntryByPaperId(index, paperId);
@@ -321,8 +436,8 @@ app.get("/api/paper/:id", (req, res) => {
     res.json({
       paper_id: paperId,
       metadata,
-      doc: null,
-      tei_xml: "",
+      doc: loaded.doc,
+      tei_xml: loaded.teiXml || "",
       annotation: loaded.annotation,
     });
   } catch (err) {
