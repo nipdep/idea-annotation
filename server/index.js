@@ -82,6 +82,7 @@ function hasMetadataObject(metadata) {
 function sanitizeMetadata(metadata) {
   return {
     title: String(metadata?.title || "").trim(),
+    abstract: String(metadata?.abstract || "").trim(),
     doi: String(metadata?.doi || "").trim(),
     year: String(metadata?.year || "").trim(),
     venue: String(metadata?.venue || "").trim(),
@@ -296,7 +297,7 @@ function startParseJob(paperId, pdfPath) {
 }
 
 async function extractPdfMetadata(pdfPath) {
-  const fallback = { title: "", doi: "", year: "", venue: "", authors: [] };
+  const fallback = { title: "", abstract: "", doi: "", year: "", venue: "", authors: [] };
   if (!pdfParse) return fallback;
   try {
     const buffer = fs.readFileSync(pdfPath);
@@ -322,6 +323,7 @@ async function extractPdfMetadata(pdfPath) {
 
     return {
       title: title || "",
+      abstract: "",
       doi: doiMatch ? doiMatch[0] : "",
       year: yearMatch ? yearMatch[0] : "",
       venue: "",
@@ -355,6 +357,7 @@ async function fetchCrossref(metadata) {
 
   return {
     title: Array.isArray(item.title) ? item.title[0] : item.title,
+    abstract: metadata.abstract || "",
     doi: item.DOI || metadata.doi || "",
     year:
       item.published?.["date-parts"]?.[0]?.[0] ||
@@ -371,6 +374,7 @@ function mergeMetadata(base, extra) {
   if (!extra) return sanitizeMetadata(base || {});
   return sanitizeMetadata({
     title: extra.title || base.title || "",
+    abstract: extra.abstract || base.abstract || "",
     doi: extra.doi || base.doi || "",
     year: extra.year || base.year || "",
     venue: extra.venue || base.venue || "",

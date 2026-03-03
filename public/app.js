@@ -700,6 +700,16 @@ function commitPendingHighlight(target) {
     return;
   }
 
+  if (target === "abstract") {
+    state.metadata.abstract = pending.text;
+    renderMetadata();
+    window.getSelection().removeAllRanges();
+    state.pendingSelection = null;
+    hideSelectionMenu();
+    showToast("Abstract recorded.", "success");
+    return;
+  }
+
   try {
     const id = nextHighlightId();
     const anchor = pending.anchor || (pending.range ? buildRectAnchorFromRange(pending.range) : null);
@@ -2448,6 +2458,12 @@ function renderLibraryDetail() {
     <div class="meta">Venue: ${metadata.venue || "-"}</div>
     <div class="meta">DOI: ${metadata.doi || "-"}</div>
   `;
+  if (metadata.abstract) {
+    const abstract = document.createElement("div");
+    abstract.className = "meta";
+    abstract.textContent = metadata.abstract;
+    details.appendChild(abstract);
+  }
   container.appendChild(details);
 
   const conceptBlock = document.createElement("div");
@@ -2566,6 +2582,7 @@ function renderMetadata() {
   const fields = [
     { key: "title", label: "Title" },
     { key: "authors", label: "Authors" },
+    { key: "abstract", label: "Abstract" },
     { key: "doi", label: "DOI" },
     { key: "year", label: "Year" },
     { key: "venue", label: "Venue" },
@@ -2665,8 +2682,11 @@ function renderMetadata() {
     row.appendChild(verify);
 
     const input =
-      key === "title" ? document.createElement("textarea") : document.createElement("input");
+      key === "title" || key === "abstract"
+        ? document.createElement("textarea")
+        : document.createElement("input");
     if (key === "title") input.rows = 3;
+    if (key === "abstract") input.rows = 5;
     input.value = value;
     input.addEventListener("input", (e) => {
       const trimmed = e.target.value.trim();
