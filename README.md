@@ -69,13 +69,40 @@ Why this stack:
 - No external parser dependency
 - Simple JSON outputs for evaluators
 
-## Run
+## Run without reverse proxy
+
 1. Install dependencies and start:
    ```bash
    npm install
    npm run dev
    ```
 2. Open `http://localhost:3000`.
+
+## Run with Caddy reverse proxy
+1. setup or check for the reverse proxy setup
+  ```bash
+  nano /etc/caddy/Caddyfile
+  ```
+  ```bash
+:8081 {
+  handle_path /idea-annotator/* {
+    reverse_proxy 127.0.0.1:3000
+  }
+
+  handle_path /static/* {
+    reverse_proxy 127.0.0.1:3030
+  }
+
+  handle_path /fuseki/* {
+    reverse_proxy 127.0.0.1:3030
+  }
+}
+  ```
+
+2. run the website
+  ```bash
+  BASE_PATH=/idea-annotator npm run dev
+  ```
 
 ## File Layout
 ```
@@ -84,3 +111,4 @@ dataset/
     paper_xxx.pdf
     paper_xxx.json
 ```
+
