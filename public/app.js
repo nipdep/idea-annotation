@@ -33,6 +33,16 @@ const descriptorTypes = [
   "limitation",
 ];
 
+const artifactRelationTypes = [
+  "sudo:extends(Model, Model)",
+  "sudo:basedOn(Artifact, Artifact)",
+  "sudo:usesComponent(Artifact, Component)",
+  "sudo:evaluatedOn(Model, Dataset)",
+  "sudo:implements(Model, Algorithm)",
+  "sudo:comparedTo(Model, Model)",
+  "sudo:outperforms(Model, Model)",
+];
+
 const requiredArgumentTypes = ["issue", "idea", "approach", "claim"];
 
 const state = {
@@ -56,6 +66,14 @@ const state = {
     concept: new Set(),
     argument: new Set(),
     descriptor: new Set(),
+  },
+  editorRelations: {
+    argument: [],
+    descriptor: [],
+  },
+  relationDrafts: {
+    argument: { source_artifact_id: "", target_artifact_id: "", relation_type: artifactRelationTypes[0] },
+    descriptor: { source_artifact_id: "", target_artifact_id: "", relation_type: artifactRelationTypes[0] },
   },
   conceptType: "",
   library: {
@@ -645,6 +663,10 @@ function formatTypeLabel(value) {
     .join(" ");
 }
 
+function formatRelationLabel(value) {
+  return String(value || "").replace(/^sudo:/, "");
+}
+
 function uniqueId(prefix, list) {
   const next = list.length + 1;
   return `${prefix}${String(next).padStart(2, "0")}`;
@@ -676,6 +698,200 @@ function normalizeAnnotations(annotation) {
     created_at: base.created_at || null,
     updated_at: base.updated_at || null,
   };
+}
+
+function relationContainerId(kind) {
+  return kind === "argument" ? "argumentConceptRefs" : "descriptorConceptRefs";
+}
+
+function relationEditorId(kind) {
+  return kind === "argument" ? "argumentArtifactRelations" : "descriptorArtifactRelations";
+}
+
+function getSelectedArtifactRefs(kind) {
+  const container = el(relationContainerId(kind));
+  if (!container) return [];
+  return Array.from(container.querySelectorAll(".ref-pill.selected")).map((pill) => pill.dataset.conceptId);
+}
+
+function resetRelationDraft(kind, selectedRefs = []) {
+  const [first = "", second = ""] = selectedRefs;
+  state.relationDrafts[kind] = {
+    source_artifact_id: first || "",
+    target_artifact_id: second || (selectedRefs.find((id) => id !== first) || ""),
+    relation_type: artifactRelationTypes[0],
+  };
+}
+
+function normalizeArtifactRelations(relations, allowedRefs) {
+  const allowed = new Set(allowedRefs || []);
+  return (Array.isArray(relations) ? relations : []).filter((relation) => {
+    const source = String(relation?.source_artifact_id || "").trim();
+    const target = String(relation?.target_artifact_id || "").trim();
+    const type = String(relation?.relation_type || "").trim();
+    return (
+      source &&
+      target &&
+      source !== target &&
+      allowed.has(source) &&
+      allowed.has(target) &&
+      artifactRelationTypes.includes(type)
+    );
+  });
+}
+
+function renderArtifactRelationEditor(kind) {
+  const container = el(relationEditorId(kind));
+  if (!container) return;
+
+  const selectedRefs = getSelectedArtifactRefs(kind);
+  state.editorRelations[kind] = normalizeArtifactRelations(state.editorRelations[kind], selectedRefs);
+
+  if (selectedRefs.length < 2) {
+    container.innerHTML = "";
+    container.classList.add("hidden");
+    resetRelationDraft(kind, selectedRefs);
+    return;
+  }
+
+  const draft = state.relationDrafts[kind] || {};
+  if (!selectedRefs.includes(draft.source_artifact_id)) {
+    draft.source_artifact_id = selectedRefs[0] || "";
+  }
+  if (
+    !selectedRefs.includes(draft.target_artifact_id) ||
+    draft.target_artifact_id === draft.source_artifact_id
+  ) {
+    draft.target_artifact_id = selectedRefs.find((id) => id !== draft.source_artifact_id) || "";
+  }
+  if (!artifactRelationTypes.includes(draft.relation_type)) {
+    draft.relation_type = artifactRelationTypes[0];
+  }
+  state.relationDrafts[kind] = draft;
+
+  container.classList.remove("hidden");
+  container.innerHTML = "";
+
+  const title = document.createElement("div");
+  title.className = "subhead";
+  title.textContent = "Artifact Relations";
+  container.appendChild(title);
+
+  const help = document.createElement("div");
+  help.className = "muted";
+  help.textContent = "Add artifact-to-artifact relations for this annotation.";
+  container.appendChild(help);
+
+  const controls = document.createElement("div");
+  controls.className = "relation-controls";
+
+  const sourceSelect = document.createElement("select");
+  selectedRefs.forEach((refId) => {
+    const option = document.createElement("option");
+    option.value = refId;
+    option.textContent = refId;
+    sourceSelect.appendChild(option);
+  });
+  sourceSelect.value = draft.source_artifact_id;
+  sourceSelect.addEventListener("change", (event) => {
+    state.relationDrafts[kind].source_artifact_id = event.target.value;
+    if (state.relationDrafts[kind].target_artifact_id === event.target.value) {
+      state.relationDrafts[kind].target_artifact_id =
+        selectedRefs.find((id) => id !== event.target.value) || "";
+      renderArtifactRelationEditor(kind);
+    }
+  });
+
+  const relationSelect = document.createElement("select");
+  artifactRelationTypes.forEach((relationType) => {
+    const option = document.createElement("option");
+    option.value = relationType;
+    option.textContent = formatRelationLabel(relationType);
+    relationSelect.appendChild(option);
+  });
+  relationSelect.value = draft.relation_type;
+  relationSelect.addEventListener("change", (event) => {
+    state.relationDrafts[kind].relation_type = event.target.value;
+  });
+
+  const targetSelect = document.createElement("select");
+  selectedRefs.forEach((refId) => {
+    const option = document.createElement("option");
+    option.value = refId;
+    option.textContent = refId;
+    option.disabled = refId === draft.source_artifact_id;
+    targetSelect.appendChild(option);
+  });
+  targetSelect.value = draft.target_artifact_id;
+  targetSelect.addEventListener("change", (event) => {
+    state.relationDrafts[kind].target_artifact_id = event.target.value;
+  });
+
+  const addButton = document.createElement("button");
+  addButton.type = "button";
+  addButton.className = "ghost";
+  addButton.textContent = "Add Relation";
+  addButton.addEventListener("click", () => {
+    const next = {
+      source_artifact_id: String(state.relationDrafts[kind].source_artifact_id || "").trim(),
+      target_artifact_id: String(state.relationDrafts[kind].target_artifact_id || "").trim(),
+      relation_type: String(state.relationDrafts[kind].relation_type || "").trim(),
+    };
+    if (!next.source_artifact_id || !next.target_artifact_id || next.source_artifact_id === next.target_artifact_id) {
+      showToast("Choose two different artifacts for the relation.", "error");
+      return;
+    }
+    const exists = state.editorRelations[kind].some(
+      (relation) =>
+        relation.source_artifact_id === next.source_artifact_id &&
+        relation.target_artifact_id === next.target_artifact_id &&
+        relation.relation_type === next.relation_type
+    );
+    if (!exists) {
+      state.editorRelations[kind].push(next);
+    }
+    renderArtifactRelationEditor(kind);
+  });
+
+  controls.appendChild(sourceSelect);
+  controls.appendChild(relationSelect);
+  controls.appendChild(targetSelect);
+  controls.appendChild(addButton);
+  container.appendChild(controls);
+
+  const list = document.createElement("div");
+  list.className = "relation-list";
+  if (!state.editorRelations[kind].length) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "No artifact relations added.";
+    list.appendChild(empty);
+  } else {
+    state.editorRelations[kind].forEach((relation, index) => {
+      const item = document.createElement("div");
+      item.className = "relation-item";
+
+      const text = document.createElement("div");
+      text.className = "relation-item-text";
+      text.textContent = `${relation.source_artifact_id} ${formatRelationLabel(
+        relation.relation_type
+      )} ${relation.target_artifact_id}`;
+
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "ghost";
+      remove.textContent = "Remove";
+      remove.addEventListener("click", () => {
+        state.editorRelations[kind].splice(index, 1);
+        renderArtifactRelationEditor(kind);
+      });
+
+      item.appendChild(text);
+      item.appendChild(remove);
+      list.appendChild(item);
+    });
+  }
+  container.appendChild(list);
 }
 
 function normalizeAnchor(anchor) {
@@ -877,6 +1093,8 @@ function resetConceptEditor() {
 
 function resetArgumentEditor() {
   state.editing.argumentId = null;
+  state.editorRelations.argument = [];
+  resetRelationDraft("argument");
   clearVirtualHighlights("argument");
   el("argumentText").value = "";
   el("argumentType").value = argumentTypes[0];
@@ -887,12 +1105,15 @@ function resetArgumentEditor() {
     .querySelectorAll(".ref-pill")
     .forEach((pill) => pill.classList.remove("selected"));
   renderHighlightPickers();
+  renderArtifactRelationEditor("argument");
   setArgumentButtonMode();
   renderArgumentList();
 }
 
 function resetDescriptorEditor() {
   state.editing.descriptorId = null;
+  state.editorRelations.descriptor = [];
+  resetRelationDraft("descriptor");
   clearVirtualHighlights("descriptor");
   el("descriptorType").value = descriptorTypes[0];
   state.highlightSelection.descriptor.clear();
@@ -900,6 +1121,7 @@ function resetDescriptorEditor() {
     .querySelectorAll(".ref-pill")
     .forEach((pill) => pill.classList.remove("selected"));
   renderHighlightPickers();
+  renderArtifactRelationEditor("descriptor");
   setDescriptorButtonMode();
   renderDescriptorList();
 }
@@ -947,6 +1169,11 @@ function startArgumentEdit(argumentId) {
       pill.classList.toggle("selected", isSelected);
       pill.dataset.selected = isSelected ? "true" : "false";
     });
+  state.editorRelations.argument = Array.isArray(argument.artifact_relations)
+    ? argument.artifact_relations.map((relation) => ({ ...relation }))
+    : [];
+  resetRelationDraft("argument", argument.concept_refs || []);
+  renderArtifactRelationEditor("argument");
   renderHighlightPickers();
   setArgumentButtonMode();
   renderArgumentList();
@@ -972,6 +1199,11 @@ function startDescriptorEdit(descriptorId) {
       pill.classList.toggle("selected", isSelected);
       pill.dataset.selected = isSelected ? "true" : "false";
     });
+  state.editorRelations.descriptor = Array.isArray(descriptor.artifact_relations)
+    ? descriptor.artifact_relations.map((relation) => ({ ...relation }))
+    : [];
+  resetRelationDraft("descriptor", descriptor.concept_refs || []);
+  renderArtifactRelationEditor("descriptor");
   renderHighlightPickers();
   setDescriptorButtonMode();
   renderDescriptorList();
@@ -1924,6 +2156,23 @@ function renderLibraryDetail() {
           info.appendChild(refsWrap);
         }
 
+        const artifactRelations = Array.isArray(arg.artifact_relations) ? arg.artifact_relations : [];
+        if (artifactRelations.length) {
+          const relLabel = document.createElement("div");
+          relLabel.innerHTML = "<strong>Artifact relations</strong>";
+          info.appendChild(relLabel);
+
+          const relWrap = document.createElement("div");
+          relWrap.className = "meta";
+          relWrap.textContent = artifactRelations
+            .map(
+              (relation) =>
+                `${relation.source_artifact_id} ${formatRelationLabel(relation.relation_type)} ${relation.target_artifact_id}`
+            )
+            .join(" | ");
+          info.appendChild(relWrap);
+        }
+
         const updated = document.createElement("details");
         updated.innerHTML = `
           <summary class="meta">Last updated</summary>
@@ -2047,6 +2296,25 @@ function renderLibraryDetail() {
             refsWrap.appendChild(refBtn);
           });
           info.appendChild(refsWrap);
+        }
+
+        const artifactRelations = Array.isArray(descriptor.artifact_relations)
+          ? descriptor.artifact_relations
+          : [];
+        if (artifactRelations.length) {
+          const relLabel = document.createElement("div");
+          relLabel.innerHTML = "<strong>Artifact relations</strong>";
+          info.appendChild(relLabel);
+
+          const relWrap = document.createElement("div");
+          relWrap.className = "meta";
+          relWrap.textContent = artifactRelations
+            .map(
+              (relation) =>
+                `${relation.source_artifact_id} ${formatRelationLabel(relation.relation_type)} ${relation.target_artifact_id}`
+            )
+            .join(" | ");
+          info.appendChild(relWrap);
         }
       }
     }
@@ -2600,10 +2868,12 @@ function renderArgumentList() {
     const info = document.createElement("div");
     const preview = argument.text ? `${argument.text.slice(0, 80)}${argument.text.length > 80 ? "..." : ""}` : "";
     const conceptCount = argument.concept_refs ? argument.concept_refs.length : 0;
+    const relationCount = argument.artifact_relations ? argument.artifact_relations.length : 0;
     info.innerHTML = `
       <div><strong>${argument.argument_id}</strong> ${formatTypeLabel(argument.arg_type || "")}</div>
       <div class="meta">${preview}</div>
       <div class="meta">Artifact refs: ${conceptCount}</div>
+      <div class="meta">Artifact relations: ${relationCount}</div>
     `;
     info.addEventListener("click", () => startArgumentEdit(argument.argument_id));
 
@@ -2643,10 +2913,12 @@ function renderDescriptorList() {
 
     const info = document.createElement("div");
     const artifactCount = descriptor.concept_refs ? descriptor.concept_refs.length : 0;
+    const relationCount = descriptor.artifact_relations ? descriptor.artifact_relations.length : 0;
     const sourceCount = descriptor.source_refs ? descriptor.source_refs.length : 0;
     info.innerHTML = `
       <div><strong>${descriptor.descriptor_id}</strong> ${formatTypeLabel(descriptor.descriptor_type || "")}</div>
       <div class="meta">Artifact refs: ${artifactCount}</div>
+      <div class="meta">Artifact relations: ${relationCount}</div>
       <div class="meta">Source refs: ${sourceCount}</div>
     `;
     info.addEventListener("click", () => startDescriptorEdit(descriptor.descriptor_id));
@@ -2678,6 +2950,7 @@ function renderArgumentConceptRefs() {
 
   if (state.annotations.concepts.length === 0) {
     container.innerHTML = '<div class="muted">Optional. Add artifacts first if needed.</div>';
+    renderArtifactRelationEditor("argument");
     return;
   }
 
@@ -2694,10 +2967,13 @@ function renderArgumentConceptRefs() {
     label.addEventListener("click", () => {
       label.classList.toggle("selected");
       label.dataset.selected = label.classList.contains("selected") ? "true" : "false";
+      renderArtifactRelationEditor("argument");
     });
 
     container.appendChild(label);
   });
+
+  renderArtifactRelationEditor("argument");
 }
 
 function renderDescriptorConceptRefs() {
@@ -2706,6 +2982,7 @@ function renderDescriptorConceptRefs() {
 
   if (state.annotations.concepts.length === 0) {
     container.innerHTML = '<div class="muted">Optional. Add artifacts first if needed.</div>';
+    renderArtifactRelationEditor("descriptor");
     return;
   }
 
@@ -2722,10 +2999,13 @@ function renderDescriptorConceptRefs() {
     label.addEventListener("click", () => {
       label.classList.toggle("selected");
       label.dataset.selected = label.classList.contains("selected") ? "true" : "false";
+      renderArtifactRelationEditor("descriptor");
     });
 
     container.appendChild(label);
   });
+
+  renderArtifactRelationEditor("descriptor");
 }
 
 function populateSelects() {
@@ -2839,12 +3119,14 @@ function createArgument() {
   const existingArgument = editingId
     ? state.annotations.arguments.find((a) => a.argument_id === editingId)
     : null;
+  const artifactRelations = normalizeArtifactRelations(state.editorRelations.argument, conceptRefs);
   const argument = {
     argument_id: editingId || uniqueId("A", state.annotations.arguments),
     text,
     arg_type: argType,
     description: state.argumentDescription.trim() || existingArgument?.description,
     concept_refs: conceptRefs.length ? conceptRefs : undefined,
+    artifact_relations: artifactRelations.length ? artifactRelations : undefined,
     source_refs: sourceRefs.length ? sourceRefs : existingArgument?.source_refs,
   };
 
@@ -2896,10 +3178,12 @@ function createDescriptor() {
   const existingDescriptor = editingId
     ? state.annotations.descriptors.find((d) => d.descriptor_id === editingId)
     : null;
+  const artifactRelations = normalizeArtifactRelations(state.editorRelations.descriptor, conceptRefs);
   const descriptor = {
     descriptor_id: editingId || uniqueId("D", state.annotations.descriptors),
     descriptor_type: descriptorType,
     concept_refs: conceptRefs.length ? conceptRefs : undefined,
+    artifact_relations: artifactRelations.length ? artifactRelations : undefined,
     source_refs: sourceRefs.length ? sourceRefs : existingDescriptor?.source_refs,
   };
 

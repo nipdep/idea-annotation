@@ -1127,6 +1127,10 @@ mark.used {
   padding-right: 4px;
 }
 
+.hidden {
+  display: none !important;
+}
+
 #highlightPicker,
 #highlightPickerArgument,
 #highlightPickerDescriptor {
@@ -1254,6 +1258,47 @@ mark.used {
 .ref-pill.selected {
   background: #bfe8c8;
   border-color: #7bbf8b;
+}
+
+.relation-editor {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: #fffaf2;
+}
+
+.relation-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.relation-controls select {
+  min-width: 0;
+}
+
+.relation-list {
+  display: grid;
+  gap: 8px;
+}
+
+.relation-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+}
+
+.relation-item-text {
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
 }
 
 .type-picker {
