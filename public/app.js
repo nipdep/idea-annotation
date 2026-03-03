@@ -55,6 +55,9 @@ const state = {
   annotations: { concepts: [], arguments: [], descriptors: [], created_at: null },
   localPdfUrl: "",
   docMode: "pdf",
+  parsedReady: false,
+  parseStatusTimer: null,
+  parseStatusToast: null,
   highlights: [],
   pendingSelection: null,
   argumentDescription: "",
@@ -201,9 +204,9 @@ function updateDocSwapButton() {
   const button = el("docSwapBtn");
   if (!button) return;
 
-  const canSwap = !!state.paperId && !!state.doc;
+  const canSwap = !!state.paperId && !!state.doc && !!state.parsedReady;
   button.disabled = !canSwap;
-  button.style.display = state.paperId ? "inline-flex" : "none";
+  button.style.display = canSwap ? "inline-flex" : "none";
 
   if (!canSwap) {
     button.title = "Parsed view unavailable";
@@ -214,6 +217,87 @@ function updateDocSwapButton() {
   const label = state.docMode === "pdf" ? "Show parsed view" : "Show PDF view";
   button.title = label;
   button.setAttribute("aria-label", label);
+}
+
+function clearParseStatusMonitor(removeToast = false) {
+  if (state.parseStatusTimer) {
+    clearTimeout(state.parseStatusTimer);
+    state.parseStatusTimer = null;
+  }
+
+  if (removeToast && state.parseStatusToast) {
+    state.parseStatusToast.remove();
+    state.parseStatusToast = null;
+  }
+}
+
+async function fetchParsedDocWhenReady(expectedPaperId) {
+  const res = await fetch(withBase(`/api/paper/${expectedPaperId}`));
+  if (!res.ok) {
+    throw new Error("Failed to refresh parsed document.");
+  }
+
+  const data = await res.json();
+  if (state.paperId !== expectedPaperId) return;
+
+  state.doc = data.doc || null;
+  state.teiXml = data.tei_xml || "";
+  state.parsedReady = !!data.parsed_ready && !!data.doc;
+  updateDocSwapButton();
+
+  if (state.docMode === "text") {
+    renderDoc();
+  }
+}
+
+function startParseStatusMonitor() {
+  clearParseStatusMonitor(true);
+
+  if (!state.paperId || state.parsedReady) {
+    updateDocSwapButton();
+    return;
+  }
+
+  const expectedPaperId = state.paperId;
+  state.parseStatusToast = showToast("Processing parsed paper view...", "loading", { persist: true });
+
+  const poll = async () => {
+    if (state.paperId !== expectedPaperId) {
+      clearParseStatusMonitor(true);
+      return;
+    }
+
+    try {
+      const res = await fetch(withBase(`/api/paper/${expectedPaperId}/status`));
+      if (!res.ok) {
+        throw new Error("Failed to check parsed paper status.");
+      }
+
+      const status = await res.json();
+      if (state.paperId !== expectedPaperId) {
+        clearParseStatusMonitor(true);
+        return;
+      }
+
+      if (status.parsed_ready) {
+        await fetchParsedDocWhenReady(expectedPaperId);
+        clearParseStatusMonitor(true);
+        showToast("Parsed paper view is ready.", "success");
+        return;
+      }
+    } catch {
+      // Keep polling; the PDF view is already usable.
+    }
+
+    if (state.paperId !== expectedPaperId) {
+      clearParseStatusMonitor(true);
+      return;
+    }
+
+    state.parseStatusTimer = setTimeout(poll, 2000);
+  };
+
+  poll();
 }
 
 function setHint(message) {
@@ -3354,13 +3438,14 @@ async function uploadPdf() {
     showToast("Choose a PDF first.", "error");
     return;
   }
+  clearParseStatusMonitor(true);
   setLocalPdfUrlFromFile(file);
 
   const form = new FormData();
   form.append("file", file);
 
   setHint("");
-  const loadingToast = showToast("Loading PDF...", "loading", { persist: true });
+  const loadingToast = showToast("Uploading paper...", "loading", { persist: true });
   const res = await fetch(withBase("/api/upload"), { method: "POST", body: form });
   if (!res.ok) {
     if (loadingToast) loadingToast.remove();
@@ -3374,6 +3459,7 @@ async function uploadPdf() {
   state.metadata = data.metadata || {};
   state.doc = data.doc || null;
   state.teiXml = data.tei_xml || "";
+  state.parsedReady = !!data.parsed_ready && !!data.doc;
   state.annotations = normalizeAnnotations(data.annotation);
   state.metadataChecks = data.annotation?.metadata_checks || {};
   state.docMode = "pdf";
@@ -3407,6 +3493,12 @@ async function uploadPdf() {
     showToast("Existing annotation loaded for this paper.", "success");
   } else {
     showToast("Paper loaded and ready to annotate.", "success");
+  }
+
+  if (!state.parsedReady) {
+    startParseStatusMonitor();
+  } else {
+    updateDocSwapButton();
   }
 }
 

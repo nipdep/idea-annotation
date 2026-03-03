@@ -26,6 +26,7 @@ const LLM_MODEL = process.env.LLM_MODEL || "qwen2.5-7b-instruct-1m";
 const LLM_MODE = process.env.LLM_MODE || "chat";
 const BASE_PATH = (process.env.BASE_PATH || "/").replace(/\/?$/, "/");
 const PDFJS_DIR = path.join(__dirname, "..", "node_modules", "pdfjs-dist");
+const parseJobs = new Map();
 
 app.use(express.json({ limit: "10mb" }));
 
@@ -254,6 +255,46 @@ async function ensureParsedArtifacts(paperId, pdfPath) {
   };
 }
 
+function getParseStatus(paperId) {
+  const loaded = loadPaper(paperId);
+  const parsedReady = !!loaded?.doc;
+  const parsing = parseJobs.has(paperId);
+  return {
+    loaded,
+    parsedReady,
+    parsing,
+  };
+}
+
+function startParseJob(paperId, pdfPath) {
+  if (!paperId || !pdfPath || !fs.existsSync(pdfPath)) return null;
+  if (parseJobs.has(paperId)) return parseJobs.get(paperId);
+
+  const job = (async () => {
+    try {
+      const parsed = await ensureParsedArtifacts(paperId, pdfPath);
+      if (hasMetadataObject(parsed?.extractedMetadata)) {
+        const index = loadIndex();
+        const items = index.items || {};
+        Object.keys(items).forEach((key) => {
+          const entry = items[key];
+          if (entry?.paper_id === paperId) {
+            entry.metadata = mergeMetadata(parsed.extractedMetadata, entry.metadata || {});
+          }
+        });
+        saveIndex(index);
+      }
+    } catch (err) {
+      console.error(`[grobid] Background parse failed for ${paperId}: ${err.message}`);
+    } finally {
+      parseJobs.delete(paperId);
+    }
+  })();
+
+  parseJobs.set(paperId, job);
+  return job;
+}
+
 async function extractPdfMetadata(pdfPath) {
   const fallback = { title: "", doi: "", year: "", venue: "", authors: [] };
   if (!pdfParse) return fallback;
@@ -351,19 +392,11 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
       let existingPaper = loadPaper(existing.paper_id);
       if (existingPaper) {
         if (!existingPaper.doc) {
-          const parsed = await ensureParsedArtifacts(existing.paper_id, existingPaper.pdfPath);
-          existingPaper = {
-            ...existingPaper,
-            teiXml: parsed.teiXml,
-            extractedMetadata: parsed.extractedMetadata,
-            doc: parsed.doc,
-            metadata: hasMetadataObject(existingPaper.annotation?.metadata)
-              ? existingPaper.annotation.metadata
-              : parsed.extractedMetadata,
-          };
+          startParseJob(existing.paper_id, existingPaper.pdfPath);
         }
         fs.unlinkSync(tempPath);
         const metadata = resolvePaperMetadata(existingPaper, existing.metadata);
+        const status = getParseStatus(existing.paper_id);
         return res.json({
           paper_id: existing.paper_id,
           metadata,
@@ -371,6 +404,8 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
           tei_xml: existingPaper.teiXml || "",
           annotation: existingPaper.annotation,
           pdf_hash: pdfHash,
+          parsed_ready: status.parsedReady,
+          parsing: status.parsing || !status.parsedReady,
           existing: true,
         });
       }
@@ -381,12 +416,11 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
     const paperId = randomId();
     const pdfPath = paperPath(paperId, "pdf");
     fs.renameSync(tempPath, pdfPath);
+    startParseJob(paperId, pdfPath);
 
-    const parsed = await ensureParsedArtifacts(paperId, pdfPath);
     const extractedMetadata = await extractPdfMetadata(pdfPath);
-    const baseMetadata = mergeMetadata(extractedMetadata, parsed.extractedMetadata);
-    const crossref = await fetchCrossref(baseMetadata).catch(() => null);
-    const metadata = mergeMetadata(baseMetadata, crossref);
+    const crossref = await fetchCrossref(extractedMetadata).catch(() => null);
+    const metadata = mergeMetadata(extractedMetadata, crossref);
 
     index.items[pdfHash] = {
       paper_id: paperId,
@@ -398,10 +432,12 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
     res.json({
       paper_id: paperId,
       metadata,
-      doc: parsed.doc,
-      tei_xml: parsed.teiXml,
+      doc: null,
+      tei_xml: "",
       annotation: null,
       pdf_hash: pdfHash,
+      parsed_ready: false,
+      parsing: true,
       existing: false,
     });
   } catch (err) {
@@ -413,25 +449,14 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
 app.get("/api/paper/:id", async (req, res) => {
   try {
     const paperId = req.params.id;
-    let loaded = loadPaper(paperId);
+    const loaded = loadPaper(paperId);
     if (!loaded) {
       return res.status(404).json({ error: "Paper not found" });
-    }
-    if (!loaded.doc) {
-      const parsed = await ensureParsedArtifacts(paperId, loaded.pdfPath);
-      loaded = {
-        ...loaded,
-        teiXml: parsed.teiXml,
-        extractedMetadata: parsed.extractedMetadata,
-        doc: parsed.doc,
-        metadata: hasMetadataObject(loaded.annotation?.metadata)
-          ? loaded.annotation.metadata
-          : parsed.extractedMetadata,
-      };
     }
     const index = loadIndex();
     const entry = findIndexEntryByPaperId(index, paperId);
     const metadata = resolvePaperMetadata(loaded, entry?.metadata);
+    const status = getParseStatus(paperId);
 
     res.json({
       paper_id: paperId,
@@ -439,6 +464,32 @@ app.get("/api/paper/:id", async (req, res) => {
       doc: loaded.doc,
       tei_xml: loaded.teiXml || "",
       annotation: loaded.annotation,
+      parsed_ready: status.parsedReady,
+      parsing: status.parsing,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/paper/:id/status", (req, res) => {
+  try {
+    const paperId = req.params.id;
+    const loaded = loadPaper(paperId);
+    if (!loaded) {
+      return res.status(404).json({ error: "Paper not found" });
+    }
+
+    const teiPath = paperPath(paperId, "tei.xml");
+    if (!fs.existsSync(teiPath) && !parseJobs.has(paperId)) {
+      startParseJob(paperId, loaded.pdfPath);
+    }
+
+    const status = getParseStatus(paperId);
+    res.json({
+      paper_id: paperId,
+      parsed_ready: status.parsedReady,
+      parsing: status.parsing,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
