@@ -300,6 +300,14 @@ function startParseStatusMonitor() {
   poll();
 }
 
+function notifyMissingAbstract() {
+  if (!String(state.metadata?.abstract || "").trim()) {
+    showToast("Abstract was not detected. Please annotate the abstract area manually.", "info", {
+      duration: 5000,
+    });
+  }
+}
+
 function setHint(message) {
   const hint = el("highlightHint");
   if (hint) hint.textContent = message || "";
@@ -3514,6 +3522,7 @@ async function uploadPdf() {
   } else {
     showToast("Paper loaded and ready to annotate.", "success");
   }
+  notifyMissingAbstract();
 
   if (!state.parsedReady) {
     startParseStatusMonitor();

@@ -27,6 +27,7 @@ const LLM_MODE = process.env.LLM_MODE || "chat";
 const BASE_PATH = (process.env.BASE_PATH || "/").replace(/\/?$/, "/");
 const PDFJS_DIR = path.join(__dirname, "..", "node_modules", "pdfjs-dist");
 const parseJobs = new Map();
+let pdfJsNodeModulePromise = null;
 
 app.use(express.json({ limit: "10mb" }));
 
@@ -52,6 +53,39 @@ function loadIndex() {
 
 function saveIndex(index) {
   fs.writeFileSync(INDEX_PATH, JSON.stringify(index, null, 2));
+}
+
+function sanitizeInlineText(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeAbstractLines(lines) {
+  return lines
+    .map((line) => sanitizeInlineText(line))
+    .filter(Boolean);
+}
+
+async function loadPdfJsNodeModule() {
+  if (!pdfJsNodeModulePromise) {
+    pdfJsNodeModulePromise = (async () => {
+      try {
+        const mod = await import("pdfjs-dist/legacy/build/pdf.mjs");
+        return mod?.default || mod;
+      } catch (firstErr) {
+        try {
+          const mod = await import("pdfjs-dist/build/pdf.mjs");
+          return mod?.default || mod;
+        } catch (secondErr) {
+          throw new Error(
+            `Unable to load pdfjs-dist in Node (${firstErr.message}; ${secondErr.message})`
+          );
+        }
+      }
+    })();
+  }
+  return pdfJsNodeModulePromise;
 }
 
 function resolveExistingFile(candidates) {
@@ -334,6 +368,139 @@ async function extractPdfMetadata(pdfPath) {
   }
 }
 
+async function detectAbstractFromPdf(pdfPath) {
+  let loadingTask = null;
+  try {
+    const pdfjsLib = await loadPdfJsNodeModule();
+    const data = new Uint8Array(fs.readFileSync(pdfPath));
+    loadingTask = pdfjsLib.getDocument({
+      data,
+      disableWorker: true,
+      useSystemFonts: true,
+      isEvalSupported: false,
+    });
+    const pdf = await loadingTask.promise;
+    const page = await pdf.getPage(1);
+    const textContent = await page.getTextContent();
+    const rawItems = Array.isArray(textContent?.items) ? textContent.items : [];
+    const items = rawItems
+      .map((item) => {
+        const str = sanitizeInlineText(item?.str);
+        if (!str) return null;
+        const transform = Array.isArray(item?.transform) ? item.transform : [];
+        const x = Number(transform[4]);
+        const y = Number(transform[5]);
+        const width = Number(item?.width) || 0;
+        const height =
+          Math.abs(Number(item?.height)) ||
+          Math.abs(Number(transform[3])) ||
+          0;
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+        return {
+          str,
+          x,
+          y,
+          width: Number.isFinite(width) ? width : 0,
+          height: Number.isFinite(height) ? height : 0,
+        };
+      })
+      .filter(Boolean);
+
+    if (!items.length) return "";
+
+    const sorted = items.slice().sort((a, b) => {
+      const yDiff = b.y - a.y;
+      if (Math.abs(yDiff) > 3) return yDiff;
+      return a.x - b.x;
+    });
+
+    const lines = [];
+    sorted.forEach((item) => {
+      const tolerance = Math.max(2, item.height * 0.45 || 2);
+      const match = lines.find((line) => Math.abs(line.y - item.y) <= tolerance);
+      if (match) {
+        match.items.push(item);
+        match.y = (match.y * (match.items.length - 1) + item.y) / match.items.length;
+      } else {
+        lines.push({ y: item.y, items: [item] });
+      }
+    });
+
+    const normalizedLines = lines
+      .map((line) => ({
+        y: line.y,
+        text: sanitizeInlineText(
+          line.items
+            .slice()
+            .sort((a, b) => a.x - b.x)
+            .map((item) => item.str)
+            .join(" ")
+        ),
+      }))
+      .filter((line) => line.text);
+
+    let headingIndex = normalizedLines.findIndex((line) =>
+      /^abstract\b[:.\-–—]*$/i.test(line.text)
+    );
+    if (headingIndex < 0) {
+      headingIndex = normalizedLines.findIndex(
+        (line) =>
+          /\babstract\b/i.test(line.text) &&
+          line.text.split(/\s+/).length <= 6
+      );
+    }
+    if (headingIndex < 0) return "";
+
+    const collected = [];
+    const headingText = normalizedLines[headingIndex].text;
+    const sameLine = headingText.match(/^abstract\b[:.\-–—]*\s*(.+)$/i);
+    if (sameLine?.[1]) {
+      collected.push(sameLine[1]);
+    }
+
+    for (let i = headingIndex + 1; i < normalizedLines.length; i += 1) {
+      const current = normalizedLines[i].text;
+      if (!current) continue;
+      if (/^(keywords|index terms)\b/i.test(current)) break;
+      if (/^(\d+[\.\)]?\s+)?introduction\b/i.test(current)) break;
+      if (/^(references|acknowledg(e)?ments?)\b/i.test(current)) break;
+      if (
+        collected.length > 0 &&
+        current.split(/\s+/).length <= 5 &&
+        /^[A-Z0-9][A-Za-z0-9\s\-:]+$/.test(current) &&
+        current === current.toUpperCase()
+      ) {
+        break;
+      }
+      collected.push(current);
+    }
+
+    return sanitizeInlineText(normalizeAbstractLines(collected).join(" "));
+  } catch (err) {
+    console.warn(`[abstract] ${path.basename(pdfPath)}: ${err.message}`);
+    return "";
+  } finally {
+    if (loadingTask && typeof loadingTask.destroy === "function") {
+      try {
+        await loadingTask.destroy();
+      } catch {
+        // Ignore cleanup errors.
+      }
+    }
+  }
+}
+
+async function enrichMetadataWithDetectedAbstract(metadata, pdfPath) {
+  const current = sanitizeMetadata(metadata || {});
+  if (current.abstract) return current;
+  const detected = await detectAbstractFromPdf(pdfPath);
+  if (!detected) return current;
+  return sanitizeMetadata({
+    ...current,
+    abstract: detected,
+  });
+}
+
 async function fetchCrossref(metadata) {
   const doi = metadata.doi?.trim();
   const title = metadata.title?.trim();
@@ -399,7 +566,14 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
           startParseJob(existing.paper_id, existingPaper.pdfPath);
         }
         fs.unlinkSync(tempPath);
-        const metadata = resolvePaperMetadata(existingPaper, existing.metadata);
+        const metadata = await enrichMetadataWithDetectedAbstract(
+          resolvePaperMetadata(existingPaper, existing.metadata),
+          existingPaper.pdfPath
+        );
+        if (!existing.metadata?.abstract && metadata.abstract) {
+          existing.metadata = mergeMetadata(existing.metadata || {}, metadata);
+          saveIndex(index);
+        }
         const status = getParseStatus(existing.paper_id);
         return res.json({
           paper_id: existing.paper_id,
@@ -422,9 +596,15 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
     fs.renameSync(tempPath, pdfPath);
     startParseJob(paperId, pdfPath);
 
-    const extractedMetadata = await extractPdfMetadata(pdfPath);
+    const extractedMetadata = await enrichMetadataWithDetectedAbstract(
+      await extractPdfMetadata(pdfPath),
+      pdfPath
+    );
     const crossref = await fetchCrossref(extractedMetadata).catch(() => null);
-    const metadata = mergeMetadata(extractedMetadata, crossref);
+    const metadata = await enrichMetadataWithDetectedAbstract(
+      mergeMetadata(extractedMetadata, crossref),
+      pdfPath
+    );
 
     index.items[pdfHash] = {
       paper_id: paperId,
@@ -459,7 +639,10 @@ app.get("/api/paper/:id", async (req, res) => {
     }
     const index = loadIndex();
     const entry = findIndexEntryByPaperId(index, paperId);
-    const metadata = resolvePaperMetadata(loaded, entry?.metadata);
+    const metadata = await enrichMetadataWithDetectedAbstract(
+      resolvePaperMetadata(loaded, entry?.metadata),
+      loaded.pdfPath
+    );
     const status = getParseStatus(paperId);
 
     res.json({
