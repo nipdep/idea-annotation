@@ -82,6 +82,20 @@ function compactHeadingText(value) {
     .toUpperCase();
 }
 
+function emptyAbstractDebug() {
+  return {
+    status: "not-run",
+    headingIndex: -1,
+    headingLine: "",
+    firstBodyIndex: -1,
+    collectedLines: [],
+    result: "",
+    pageWidth: 0,
+    lines: [],
+    reason: "",
+  };
+}
+
 function joinParagraphLines(lines) {
   return normalizeAbstractLines(lines).reduce((acc, line) => {
     if (!line) return acc;
@@ -396,6 +410,7 @@ async function extractPdfMetadata(pdfPath) {
 
 async function detectAbstractFromPdf(pdfPath) {
   let loadingTask = null;
+  const debug = emptyAbstractDebug();
   try {
     const pdfjsLib = await loadPdfJsNodeModule();
     const data = new Uint8Array(fs.readFileSync(pdfPath));
@@ -409,6 +424,7 @@ async function detectAbstractFromPdf(pdfPath) {
     const page = await pdf.getPage(1);
     const viewport = page.getViewport({ scale: 1 });
     const pageWidth = Number(viewport?.width) || 600;
+    debug.pageWidth = pageWidth;
     const textContent = await page.getTextContent();
     const rawItems = Array.isArray(textContent?.items) ? textContent.items : [];
     const items = rawItems
@@ -434,7 +450,11 @@ async function detectAbstractFromPdf(pdfPath) {
       })
       .filter(Boolean);
 
-    if (!items.length) return "";
+    if (!items.length) {
+      debug.status = "no-items";
+      debug.reason = "No text items found on page 1.";
+      return { text: "", debug };
+    }
 
     const sorted = items.slice().sort((a, b) => {
       const yDiff = b.y - a.y;
@@ -475,6 +495,16 @@ async function detectAbstractFromPdf(pdfPath) {
         };
       })
       .filter((line) => line.text);
+    debug.lines = normalizedLines.map((line, index) => ({
+      index,
+      text: line.text,
+      compact: compactHeadingText(line.text),
+      xMin: Number(line.xMin.toFixed(2)),
+      xMax: Number(line.xMax.toFixed(2)),
+      width: Number(line.width.toFixed(2)),
+      avgHeight: Number(line.avgHeight.toFixed(2)),
+      y: Number(line.y.toFixed(2)),
+    }));
 
     const isLikelySectionHeading = (line) => {
       const text = String(line?.text || "");
@@ -512,11 +542,17 @@ async function detectAbstractFromPdf(pdfPath) {
         return compact.startsWith("ABSTRACT") && line.width <= pageWidth * 0.7;
       });
     }
-    if (headingIndex < 0) return "";
+    if (headingIndex < 0) {
+      debug.status = "heading-not-found";
+      debug.reason = "No abstract heading matched on page 1.";
+      return { text: "", debug };
+    }
+    debug.headingIndex = headingIndex;
 
     const collected = [];
     const headingLine = normalizedLines[headingIndex];
     const headingText = headingLine.text;
+    debug.headingLine = headingText;
     const compactHeading = compactHeadingText(headingText);
     if (compactHeading.startsWith("ABSTRACT") && compactHeading !== "ABSTRACT") {
       const sameLineTail = sanitizeInlineText(
@@ -538,8 +574,17 @@ async function detectAbstractFromPdf(pdfPath) {
       }
     }
     if (bodyStartIndex < 0) {
-      return sanitizeInlineText(joinParagraphLines(collected));
+      const result = sanitizeInlineText(joinParagraphLines(collected));
+      debug.status = result ? "ok-heading-only" : "body-not-found";
+      debug.reason = result
+        ? "Abstract content was taken from the heading line only."
+        : "No abstract body block found under the heading.";
+      debug.firstBodyIndex = -1;
+      debug.collectedLines = [...collected];
+      debug.result = result;
+      return { text: result, debug };
     }
+    debug.firstBodyIndex = bodyStartIndex;
 
     const firstBodyLine = normalizedLines[bodyStartIndex];
     const paragraphLeft = firstBodyLine.xMin;
@@ -559,10 +604,17 @@ async function detectAbstractFromPdf(pdfPath) {
       previousLine = line;
     }
 
-    return sanitizeInlineText(joinParagraphLines(collected));
+    const result = sanitizeInlineText(joinParagraphLines(collected));
+    debug.status = result ? "ok" : "empty-result";
+    debug.reason = result ? "" : "Lines were matched but the joined result is empty.";
+    debug.collectedLines = [...collected];
+    debug.result = result;
+    return { text: result, debug };
   } catch (err) {
     console.warn(`[abstract] ${path.basename(pdfPath)}: ${err.message}`);
-    return "";
+    debug.status = "error";
+    debug.reason = err.message;
+    return { text: "", debug };
   } finally {
     if (loadingTask && typeof loadingTask.destroy === "function") {
       try {
@@ -576,13 +628,31 @@ async function detectAbstractFromPdf(pdfPath) {
 
 async function enrichMetadataWithDetectedAbstract(metadata, pdfPath) {
   const current = sanitizeMetadata(metadata || {});
-  if (current.abstract) return current;
-  const detected = await detectAbstractFromPdf(pdfPath);
-  if (!detected) return current;
-  return sanitizeMetadata({
-    ...current,
-    abstract: detected,
-  });
+  if (current.abstract) {
+    return {
+      metadata: current,
+      abstractDebug: {
+        ...emptyAbstractDebug(),
+        status: "skipped-existing",
+        reason: "Metadata already has an abstract value.",
+        result: current.abstract,
+      },
+    };
+  }
+  const detection = await detectAbstractFromPdf(pdfPath);
+  if (!detection.text) {
+    return {
+      metadata: current,
+      abstractDebug: detection.debug,
+    };
+  }
+  return {
+    metadata: sanitizeMetadata({
+      ...current,
+      abstract: detection.text,
+    }),
+    abstractDebug: detection.debug,
+  };
 }
 
 async function fetchCrossref(metadata) {
@@ -650,10 +720,11 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
           startParseJob(existing.paper_id, existingPaper.pdfPath);
         }
         fs.unlinkSync(tempPath);
-        const metadata = await enrichMetadataWithDetectedAbstract(
+        const abstractResult = await enrichMetadataWithDetectedAbstract(
           resolvePaperMetadata(existingPaper, existing.metadata),
           existingPaper.pdfPath
         );
+        const metadata = abstractResult.metadata;
         if (!existing.metadata?.abstract && metadata.abstract) {
           existing.metadata = mergeMetadata(existing.metadata || {}, metadata);
           saveIndex(index);
@@ -668,6 +739,7 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
           pdf_hash: pdfHash,
           parsed_ready: status.parsedReady,
           parsing: status.parsing || !status.parsedReady,
+          abstract_debug: abstractResult.abstractDebug,
           existing: true,
         });
       }
@@ -680,15 +752,16 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
     fs.renameSync(tempPath, pdfPath);
     startParseJob(paperId, pdfPath);
 
-    const extractedMetadata = await enrichMetadataWithDetectedAbstract(
+    const extractedAbstractResult = await enrichMetadataWithDetectedAbstract(
       await extractPdfMetadata(pdfPath),
       pdfPath
     );
-    const crossref = await fetchCrossref(extractedMetadata).catch(() => null);
-    const metadata = await enrichMetadataWithDetectedAbstract(
-      mergeMetadata(extractedMetadata, crossref),
+    const crossref = await fetchCrossref(extractedAbstractResult.metadata).catch(() => null);
+    const metadataResult = await enrichMetadataWithDetectedAbstract(
+      mergeMetadata(extractedAbstractResult.metadata, crossref),
       pdfPath
     );
+    const metadata = metadataResult.metadata;
 
     index.items[pdfHash] = {
       paper_id: paperId,
@@ -706,6 +779,7 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
       pdf_hash: pdfHash,
       parsed_ready: false,
       parsing: true,
+      abstract_debug: metadataResult.abstractDebug,
       existing: false,
     });
   } catch (err) {
@@ -723,10 +797,11 @@ app.get("/api/paper/:id", async (req, res) => {
     }
     const index = loadIndex();
     const entry = findIndexEntryByPaperId(index, paperId);
-    const metadata = await enrichMetadataWithDetectedAbstract(
+    const abstractResult = await enrichMetadataWithDetectedAbstract(
       resolvePaperMetadata(loaded, entry?.metadata),
       loaded.pdfPath
     );
+    const metadata = abstractResult.metadata;
     const status = getParseStatus(paperId);
 
     res.json({
@@ -737,6 +812,7 @@ app.get("/api/paper/:id", async (req, res) => {
       annotation: loaded.annotation,
       parsed_ready: status.parsedReady,
       parsing: status.parsing,
+      abstract_debug: abstractResult.abstractDebug,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

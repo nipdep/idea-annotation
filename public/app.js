@@ -231,6 +231,15 @@ function clearParseStatusMonitor(removeToast = false) {
   }
 }
 
+function logAbstractDebug(payload) {
+  if (!payload) return;
+  try {
+    console.debug("[abstract-detect]", JSON.parse(JSON.stringify(payload)));
+  } catch {
+    console.debug("[abstract-detect]", payload);
+  }
+}
+
 async function fetchParsedDocWhenReady(expectedPaperId) {
   const res = await fetch(withBase(`/api/paper/${expectedPaperId}`));
   if (!res.ok) {
@@ -243,6 +252,7 @@ async function fetchParsedDocWhenReady(expectedPaperId) {
   state.doc = data.doc || null;
   state.teiXml = data.tei_xml || "";
   state.parsedReady = !!data.parsed_ready && !!data.doc;
+  logAbstractDebug(data.abstract_debug);
   updateDocSwapButton();
 
   if (state.docMode === "text") {
@@ -3482,6 +3492,7 @@ async function uploadPdf() {
   }
 
   const data = await res.json();
+  logAbstractDebug(data.abstract_debug);
   state.paperId = data.paper_id;
   state.pdfHash = data.pdf_hash || "";
   state.metadata = data.metadata || {};
