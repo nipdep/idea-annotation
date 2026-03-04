@@ -17,8 +17,17 @@ try {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DATASET_DIR = path.join(__dirname, "..", "dataset", "papers");
-const TMP_DIR = path.join(__dirname, "..", "tmp");
+const CUSTOM_DATA_DIR = process.env.ANNOTATOR_DATA_DIR || process.env.DATA_DIR;
+const STORAGE_DIR = path.resolve(
+  CUSTOM_DATA_DIR || path.join(__dirname, "..", "dataset")
+);
+const DATASET_DIR = path.join(STORAGE_DIR, "papers");
+const TMP_DIR = path.resolve(
+  process.env.TMP_DIR ||
+    (CUSTOM_DATA_DIR
+      ? path.join(STORAGE_DIR, "tmp")
+      : path.join(__dirname, "..", "tmp"))
+);
 const INDEX_PATH = path.join(DATASET_DIR, "index.json");
 const GROBID_URL = process.env.GROBID_URL || "http://localhost:8070";
 const LLM_URL = process.env.LLM_URL || "http://localhost:1234/v1/chat/completions";

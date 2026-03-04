@@ -78,6 +78,32 @@ Why this stack:
    ```
 2. Open `http://localhost:3000`.
 
+## Run in Docker
+
+The container keeps all uploaded PDFs, parsed TEI/Markdown, and saved annotations under `ANNOTATOR_DATA_DIR` (default: `/data`). Mount that path to a persistent volume so data survives container restarts.
+
+1. Build the image:
+   ```bash
+   docker build -t paper-annotator .
+   ```
+2. Run it with a persistent bind mount and explicit external service URLs:
+   ```bash
+   docker run \
+     --name paper-annotator \
+     -p 3000:3000 \
+     -v "$(pwd)/annotator-data:/data" \
+     -e ANNOTATOR_DATA_DIR=/data \
+     -e GROBID_URL=http://host.docker.internal:8070 \
+     -e LLM_URL=http://host.docker.internal:1234/v1/chat/completions \
+     --add-host=host.docker.internal:host-gateway \
+     paper-annotator
+   ```
+
+Notes:
+- `GROBID_URL` and `LLM_URL` must point to services running outside the container.
+- `--add-host=host.docker.internal:host-gateway` is useful on Linux so the container can reach services on the Docker host.
+- If your `grobid` or LLM service is on another machine, replace those URLs with that machine's reachable hostname/IP.
+
 ## Run with Caddy reverse proxy
 1. setup or check for the reverse proxy setup
   ```bash
@@ -111,4 +137,3 @@ dataset/
     paper_xxx.pdf
     paper_xxx.json
 ```
-
