@@ -107,6 +107,16 @@ function joinParagraphLines(lines) {
   }, "");
 }
 
+function looksLikeBadAbstract(value) {
+  const text = sanitizeInlineText(value);
+  if (!text) return false;
+  if (/@/.test(text)) return true;
+  if (/\{[^}]+\}@/.test(text)) return true;
+  if (/^department of\b/i.test(text)) return true;
+  if (/^[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/.test(text)) return true;
+  return false;
+}
+
 async function loadPdfJsNodeModule() {
   if (!pdfJsNodeModulePromise) {
     pdfJsNodeModulePromise = (async () => {
@@ -556,7 +566,11 @@ async function detectAbstractFromPdf(pdfPath) {
 
 async function enrichMetadataWithDetectedAbstract(metadata, pdfPath) {
   const current = sanitizeMetadata(metadata || {});
-  if (current.abstract) {
+  const hasExistingAbstract = Boolean(current.abstract);
+  const shouldRedetect =
+    hasExistingAbstract && looksLikeBadAbstract(current.abstract);
+
+  if (hasExistingAbstract && !shouldRedetect) {
     return {
       metadata: current,
       abstractDebug: {
@@ -567,19 +581,43 @@ async function enrichMetadataWithDetectedAbstract(metadata, pdfPath) {
       },
     };
   }
+
   const detection = await detectAbstractFromPdf(pdfPath);
   if (!detection.text) {
     return {
-      metadata: current,
-      abstractDebug: detection.debug,
+      metadata: shouldRedetect
+        ? sanitizeMetadata({
+            ...current,
+            abstract: "",
+          })
+        : current,
+      abstractDebug: {
+        ...detection.debug,
+        status:
+          shouldRedetect && detection.debug.status === "not-run"
+            ? "redetect-failed"
+            : detection.debug.status,
+        reason: shouldRedetect
+          ? detection.debug.reason
+            ? `Existing abstract looked invalid and re-detection failed: ${detection.debug.reason}`
+            : "Existing abstract looked invalid and re-detection failed."
+          : detection.debug.reason,
+      },
     };
   }
+
   return {
     metadata: sanitizeMetadata({
       ...current,
       abstract: detection.text,
     }),
-    abstractDebug: detection.debug,
+    abstractDebug: {
+      ...detection.debug,
+      status: shouldRedetect ? "replaced-suspicious-existing" : detection.debug.status,
+      reason: shouldRedetect
+        ? "Existing abstract looked invalid and was replaced by PDF-detected text."
+        : detection.debug.reason,
+    },
   };
 }
 
