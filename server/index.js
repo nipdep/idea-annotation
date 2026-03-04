@@ -67,6 +67,12 @@ function normalizeAbstractLines(lines) {
     .filter(Boolean);
 }
 
+function compactHeadingText(value) {
+  return String(value || "")
+    .replace(/[\s:.\-–—]/g, "")
+    .toUpperCase();
+}
+
 function joinParagraphLines(lines) {
   return normalizeAbstractLines(lines).reduce((acc, line) => {
     if (!line) return acc;
@@ -463,7 +469,15 @@ async function detectAbstractFromPdf(pdfPath) {
 
     const isLikelySectionHeading = (line) => {
       const text = String(line?.text || "");
+      const compact = compactHeadingText(text);
       if (!text) return false;
+      if (compact === "ABSTRACT") return true;
+      if (compact === "INTRODUCTION") return true;
+      if (compact === "KEYWORDS") return true;
+      if (compact === "INDEXTERMS") return true;
+      if (compact === "REFERENCES") return true;
+      if (compact === "ACKNOWLEDGEMENTS" || compact === "ACKNOWLEDGMENTS") return true;
+      if (/^\d+INTRODUCTION$/.test(compact)) return true;
       if (/^(keywords|index terms)\b/i.test(text)) return true;
       if (/^(\d+[\.\)]?\s+)?introduction\b/i.test(text)) return true;
       if (/^(references|acknowledg(e)?ments?)\b/i.test(text)) return true;
@@ -479,25 +493,29 @@ async function detectAbstractFromPdf(pdfPath) {
       return false;
     };
 
-    let headingIndex = normalizedLines.findIndex((line) =>
-      /^abstract\b[:.\-–—]*$/i.test(line.text)
-    );
+    let headingIndex = normalizedLines.findIndex((line) => {
+      const compact = compactHeadingText(line.text);
+      return compact === "ABSTRACT";
+    });
     if (headingIndex < 0) {
-      headingIndex = normalizedLines.findIndex(
-        (line) =>
-          /\babstract\b/i.test(line.text) &&
-          line.text.split(/\s+/).length <= 6 &&
-          line.width <= pageWidth * 0.55
-      );
+      headingIndex = normalizedLines.findIndex((line) => {
+        const compact = compactHeadingText(line.text);
+        return compact.startsWith("ABSTRACT") && line.width <= pageWidth * 0.7;
+      });
     }
     if (headingIndex < 0) return "";
 
     const collected = [];
     const headingLine = normalizedLines[headingIndex];
     const headingText = headingLine.text;
-    const sameLine = headingText.match(/^abstract\b[:.\-–—]*\s*(.+)$/i);
-    if (sameLine?.[1]) {
-      collected.push(sameLine[1]);
+    const compactHeading = compactHeadingText(headingText);
+    if (compactHeading.startsWith("ABSTRACT") && compactHeading !== "ABSTRACT") {
+      const sameLineTail = sanitizeInlineText(
+        headingText.replace(/^\s*abstract\b[:.\-–—]*/i, "")
+      );
+      if (sameLineTail) {
+        collected.push(sameLineTail);
+      }
     }
 
     let bodyStartIndex = -1;
