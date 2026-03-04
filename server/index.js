@@ -444,10 +444,12 @@ async function detectAbstractFromPdf(pdfPath) {
       if (compact === "ABSTRACT") return true;
       if (compact === "INTRODUCTION") return true;
       if (/^\d+INTRODUCTION$/.test(compact)) return true;
+      if (/INTRODUCTION/.test(compact) && compact.length <= 24) return true;
       if (compact === "KEYWORDS" || compact === "INDEXTERMS") return true;
       if (compact === "REFERENCES") return true;
       if (compact === "ACKNOWLEDGEMENTS" || compact === "ACKNOWLEDGMENTS") return true;
       if (/^(\d+[\.\)]?\s+)?introduction\b/i.test(text)) return true;
+      if (/\bintroduction\b/i.test(text) && text.split(/\s+/).length <= 4) return true;
       if (/^(keywords|index terms|references|acknowledg(e)?ments?)\b/i.test(text)) return true;
       return false;
     };
