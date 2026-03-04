@@ -409,170 +409,87 @@ async function extractPdfMetadata(pdfPath) {
 }
 
 async function detectAbstractFromPdf(pdfPath) {
-  let loadingTask = null;
   const debug = emptyAbstractDebug();
   try {
-    const pdfjsLib = await loadPdfJsNodeModule();
-    const data = new Uint8Array(fs.readFileSync(pdfPath));
-    loadingTask = pdfjsLib.getDocument({
-      data,
-      disableWorker: true,
-      useSystemFonts: true,
-      isEvalSupported: false,
-    });
-    const pdf = await loadingTask.promise;
-    const page = await pdf.getPage(1);
-    const viewport = page.getViewport({ scale: 1 });
-    const pageWidth = Number(viewport?.width) || 600;
-    debug.pageWidth = pageWidth;
-    const textContent = await page.getTextContent();
-    const rawItems = Array.isArray(textContent?.items) ? textContent.items : [];
-    const items = rawItems
-      .map((item) => {
-        const str = sanitizeInlineText(item?.str);
-        if (!str) return null;
-        const transform = Array.isArray(item?.transform) ? item.transform : [];
-        const x = Number(transform[4]);
-        const y = Number(transform[5]);
-        const width = Number(item?.width) || 0;
-        const height =
-          Math.abs(Number(item?.height)) ||
-          Math.abs(Number(transform[3])) ||
-          0;
-        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-        return {
-          str,
-          x,
-          y,
-          width: Number.isFinite(width) ? width : 0,
-          height: Number.isFinite(height) ? height : 0,
-        };
-      })
-      .filter(Boolean);
-
-    if (!items.length) {
-      debug.status = "no-items";
-      debug.reason = "No text items found on page 1.";
+    if (!pdfParse) {
+      debug.status = "error";
+      debug.reason = 'Optional dependency "pdf-parse" is not available.';
       return { text: "", debug };
     }
 
-    const sorted = items.slice().sort((a, b) => {
-      const yDiff = b.y - a.y;
-      if (Math.abs(yDiff) > 3) return yDiff;
-      return a.x - b.x;
-    });
+    const buffer = fs.readFileSync(pdfPath);
+    const parsed = await pdfParse(buffer, { max: 1 });
+    const rawText = String(parsed?.text || "");
+    if (!rawText.trim()) {
+      debug.status = "no-items";
+      debug.reason = "No text extracted from page 1.";
+      return { text: "", debug };
+    }
 
-    const lines = [];
-    sorted.forEach((item) => {
-      const tolerance = Math.max(2, item.height * 0.45 || 2);
-      const match = lines.find((line) => Math.abs(line.y - item.y) <= tolerance);
-      if (match) {
-        match.items.push(item);
-        match.y = (match.y * (match.items.length - 1) + item.y) / match.items.length;
-      } else {
-        lines.push({ y: item.y, items: [item] });
-      }
-    });
+    const rawLines = rawText.split(/\r?\n/);
+    const normalizedLines = rawLines
+      .map((line) => sanitizeInlineText(line))
+      .filter(Boolean);
 
-    const normalizedLines = lines
-      .map((line) => {
-        const sortedItems = line.items.slice().sort((a, b) => a.x - b.x);
-        const xMin = sortedItems[0]?.x || 0;
-        const xMax = sortedItems.reduce(
-          (max, item) => Math.max(max, item.x + item.width),
-          xMin
-        );
-        const avgHeight =
-          sortedItems.reduce((sum, item) => sum + (item.height || 0), 0) /
-            (sortedItems.length || 1) || 0;
-        return {
-          y: line.y,
-          xMin,
-          xMax,
-          width: Math.max(0, xMax - xMin),
-          avgHeight,
-          text: sanitizeInlineText(sortedItems.map((item) => item.str).join(" ")),
-        };
-      })
-      .filter((line) => line.text);
     debug.lines = normalizedLines.map((line, index) => ({
       index,
-      text: line.text,
-      compact: compactHeadingText(line.text),
-      xMin: Number(line.xMin.toFixed(2)),
-      xMax: Number(line.xMax.toFixed(2)),
-      width: Number(line.width.toFixed(2)),
-      avgHeight: Number(line.avgHeight.toFixed(2)),
-      y: Number(line.y.toFixed(2)),
+      text: line,
+      compact: compactHeadingText(line),
     }));
 
     const isLikelySectionHeading = (line) => {
-      const text = String(line?.text || "");
+      const text = String(line || "");
       const compact = compactHeadingText(text);
       if (!text) return false;
       if (compact === "ABSTRACT") return true;
       if (compact === "INTRODUCTION") return true;
-      if (compact === "KEYWORDS") return true;
-      if (compact === "INDEXTERMS") return true;
+      if (/^\d+INTRODUCTION$/.test(compact)) return true;
+      if (compact === "KEYWORDS" || compact === "INDEXTERMS") return true;
       if (compact === "REFERENCES") return true;
       if (compact === "ACKNOWLEDGEMENTS" || compact === "ACKNOWLEDGMENTS") return true;
-      if (/^\d+INTRODUCTION$/.test(compact)) return true;
-      if (/^(keywords|index terms)\b/i.test(text)) return true;
       if (/^(\d+[\.\)]?\s+)?introduction\b/i.test(text)) return true;
-      if (/^(references|acknowledg(e)?ments?)\b/i.test(text)) return true;
-      if (/^\d+(\.\d+)*\s+[A-Z]/.test(text)) return true;
-      const words = text.split(/\s+/).filter(Boolean);
-      if (
-        words.length <= 6 &&
-        text === text.toUpperCase() &&
-        line.width <= pageWidth * 0.75
-      ) {
-        return true;
-      }
+      if (/^(keywords|index terms|references|acknowledg(e)?ments?)\b/i.test(text)) return true;
       return false;
     };
 
-    let headingIndex = normalizedLines.findIndex((line) => {
-      const compact = compactHeadingText(line.text);
-      return compact === "ABSTRACT";
-    });
+    let headingIndex = normalizedLines.findIndex(
+      (line) => compactHeadingText(line) === "ABSTRACT"
+    );
     if (headingIndex < 0) {
-      headingIndex = normalizedLines.findIndex((line) => {
-        const compact = compactHeadingText(line.text);
-        return compact.startsWith("ABSTRACT") && line.width <= pageWidth * 0.7;
-      });
+      headingIndex = normalizedLines.findIndex((line) =>
+        compactHeadingText(line).startsWith("ABSTRACT")
+      );
     }
+
     if (headingIndex < 0) {
       debug.status = "heading-not-found";
-      debug.reason = "No abstract heading matched on page 1.";
+      debug.reason = "No abstract heading matched on page 1 text.";
       return { text: "", debug };
     }
+
     debug.headingIndex = headingIndex;
+    debug.headingLine = normalizedLines[headingIndex];
 
     const collected = [];
-    const headingLine = normalizedLines[headingIndex];
-    const headingText = headingLine.text;
-    debug.headingLine = headingText;
+    const headingText = normalizedLines[headingIndex];
     const compactHeading = compactHeadingText(headingText);
     if (compactHeading.startsWith("ABSTRACT") && compactHeading !== "ABSTRACT") {
       const sameLineTail = sanitizeInlineText(
         headingText.replace(/^\s*abstract\b[:.\-–—]*/i, "")
       );
-      if (sameLineTail) {
-        collected.push(sameLineTail);
-      }
+      if (sameLineTail) collected.push(sameLineTail);
     }
 
     let bodyStartIndex = -1;
     for (let i = headingIndex + 1; i < normalizedLines.length; i += 1) {
       const line = normalizedLines[i];
-      const words = line.text.split(/\s+/).filter(Boolean);
       if (isLikelySectionHeading(line)) break;
-      if (words.length >= 5 || line.width >= pageWidth * 0.3) {
+      if (line.split(/\s+/).filter(Boolean).length >= 4) {
         bodyStartIndex = i;
         break;
       }
     }
+
     if (bodyStartIndex < 0) {
       const result = sanitizeInlineText(joinParagraphLines(collected));
       debug.status = result ? "ok-heading-only" : "body-not-found";
@@ -584,24 +501,23 @@ async function detectAbstractFromPdf(pdfPath) {
       debug.result = result;
       return { text: result, debug };
     }
+
     debug.firstBodyIndex = bodyStartIndex;
+    let blankRun = 0;
 
-    const firstBodyLine = normalizedLines[bodyStartIndex];
-    const paragraphLeft = firstBodyLine.xMin;
-    let previousLine = firstBodyLine;
+    for (let i = bodyStartIndex; i < rawLines.length; i += 1) {
+      const rawLine = String(rawLines[i] || "");
+      const line = sanitizeInlineText(rawLine);
 
-    for (let i = bodyStartIndex; i < normalizedLines.length; i += 1) {
-      const line = normalizedLines[i];
-      if (isLikelySectionHeading(line)) break;
+      if (!line) {
+        blankRun += 1;
+        if (collected.length && blankRun >= 2) break;
+        continue;
+      }
 
-      const yGap = Math.max(0, previousLine.y - line.y);
-      const maxGap = Math.max(20, Math.max(previousLine.avgHeight, line.avgHeight) * 3.2);
-      if (i > bodyStartIndex && yGap > maxGap) break;
-
-      if (i > bodyStartIndex && line.xMin < paragraphLeft - 60) break;
-
-      collected.push(line.text);
-      previousLine = line;
+      blankRun = 0;
+      if (i !== bodyStartIndex && isLikelySectionHeading(line)) break;
+      collected.push(line);
     }
 
     const result = sanitizeInlineText(joinParagraphLines(collected));
@@ -615,14 +531,6 @@ async function detectAbstractFromPdf(pdfPath) {
     debug.status = "error";
     debug.reason = err.message;
     return { text: "", debug };
-  } finally {
-    if (loadingTask && typeof loadingTask.destroy === "function") {
-      try {
-        await loadingTask.destroy();
-      } catch {
-        // Ignore cleanup errors.
-      }
-    }
   }
 }
 
