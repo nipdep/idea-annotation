@@ -10,7 +10,8 @@ COPY server ./server
 
 ENV NODE_ENV=production \
     PORT=3000 \
-    ANNOTATOR_DATA_DIR=/data
+    ANNOTATOR_DATA_DIR=/data \
+    BASE_PATH=/
 
 RUN mkdir -p /data
 

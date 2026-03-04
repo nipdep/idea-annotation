@@ -93,6 +93,7 @@ The container keeps all uploaded PDFs, parsed TEI/Markdown, and saved annotation
      -p 3000:3000 \
      -v "$(pwd)/annotator-data:/data" \
      -e ANNOTATOR_DATA_DIR=/data \
+     -e BASE_PATH=/idea-annotator \
      -e GROBID_URL=http://host.docker.internal:8070 \
      -e LLM_URL=http://host.docker.internal:1234/v1/chat/completions \
      --add-host=host.docker.internal:host-gateway \
@@ -100,6 +101,7 @@ The container keeps all uploaded PDFs, parsed TEI/Markdown, and saved annotation
    ```
 
 Notes:
+- `BASE_PATH` is applied at container startup, so you can change it with `docker run -e BASE_PATH=/your-prefix` without rebuilding the image.
 - `GROBID_URL` and `LLM_URL` must point to services running outside the container.
 - `--add-host=host.docker.internal:host-gateway` is useful on Linux so the container can reach services on the Docker host.
 - If your `grobid` or LLM service is on another machine, replace those URLs with that machine's reachable hostname/IP.
