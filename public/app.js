@@ -203,9 +203,9 @@ function clearParseStatusMonitor(removeToast = false) {
 function logAbstractDebug(payload) {
   if (!payload) return;
   try {
-    console.debug("[abstract-detect]", JSON.parse(JSON.stringify(payload)));
+    console.log("[abstract-detect]", JSON.parse(JSON.stringify(payload)));
   } catch {
-    console.debug("[abstract-detect]", payload);
+    console.log("[abstract-detect]", payload);
   }
 }
 

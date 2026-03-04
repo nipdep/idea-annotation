@@ -418,11 +418,33 @@ async function detectAbstractFromPdf(pdfPath) {
     }
 
     const buffer = fs.readFileSync(pdfPath);
-    const parsed = await pdfParse(buffer, { max: 1 });
-    const rawText = String(parsed?.text || "");
+    let rawText = "";
+    try {
+      const parsedFirstPage = await pdfParse(buffer, { max: 1 });
+      rawText = String(parsedFirstPage?.text || "");
+    } catch (err) {
+      debug.reason = `First-page extraction failed: ${err.message}`;
+    }
+
+    if (!rawText.trim()) {
+      try {
+        const parsedFull = await pdfParse(buffer);
+        rawText = String(parsedFull?.text || "");
+        if (rawText.trim()) {
+          debug.reason = debug.reason
+            ? `${debug.reason} | Fell back to full-document text extraction.`
+            : "Fell back to full-document text extraction.";
+        }
+      } catch (err) {
+        debug.reason = debug.reason
+          ? `${debug.reason} | Full-document extraction failed: ${err.message}`
+          : `Full-document extraction failed: ${err.message}`;
+      }
+    }
+
     if (!rawText.trim()) {
       debug.status = "no-items";
-      debug.reason = "No text extracted from page 1.";
+      debug.reason = debug.reason || "No text extracted from the PDF.";
       return { text: "", debug };
     }
 
@@ -430,6 +452,12 @@ async function detectAbstractFromPdf(pdfPath) {
     const normalizedLines = rawLines
       .map((line) => sanitizeInlineText(line))
       .filter(Boolean);
+
+    if (!normalizedLines.length) {
+      debug.status = "no-items";
+      debug.reason = debug.reason || "Text extraction returned only blank lines.";
+      return { text: "", debug };
+    }
 
     debug.lines = normalizedLines.map((line, index) => ({
       index,
