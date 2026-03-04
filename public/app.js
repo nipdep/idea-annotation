@@ -97,6 +97,9 @@ const state = {
 
 const el = (id) => document.getElementById(id);
 const BASE_PATH = document.querySelector("base")?.getAttribute("href") || "/";
+const PDFJS_CDN_VERSION = "2.16.105";
+const PDFJS_CDN_MAIN = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_CDN_VERSION}/build/pdf.min.js`;
+const PDFJS_CDN_WORKER = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_CDN_VERSION}/build/pdf.worker.min.js`;
 
 function withBase(path) {
   const base = (BASE_PATH || "/").replace(/\/$/, "");
@@ -148,24 +151,7 @@ function resolvePdfJsGlobal() {
 }
 
 async function resolvePdfWorkerSrc() {
-  const candidates = [
-    withBase("/pdfjs/pdf.worker.js"),
-    withBase("/pdfjs/build/pdf.worker.js"),
-    withBase("/pdfjs/legacy/build/pdf.worker.js"),
-    withBase("/pdfjs/build/pdf.worker.min.js"),
-    withBase("/pdfjs/legacy/build/pdf.worker.min.js"),
-  ];
-
-  for (const src of candidates) {
-    try {
-      const res = await fetch(src, { method: "GET" });
-      if (res.ok) return src;
-    } catch {
-      // continue trying
-    }
-  }
-
-  return "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/build/pdf.worker.min.js";
+  return PDFJS_CDN_WORKER;
 }
 
 async function ensurePdfJsLoaded() {
@@ -174,30 +160,13 @@ async function ensurePdfJsLoaded() {
     return existingGlobal;
   }
 
-  const candidates = [
-    withBase("/pdfjs/pdf.js"),
-    withBase("/pdfjs/build/pdf.js"),
-    withBase("/pdfjs/legacy/build/pdf.js"),
-    withBase("/pdfjs/build/pdf.min.js"),
-    withBase("/pdfjs/legacy/build/pdf.min.js"),
-    "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/build/pdf.min.js",
-  ];
-
-  const errors = [];
-  for (const src of candidates) {
-    try {
-      await loadScript(src);
-      const loadedGlobal = resolvePdfJsGlobal();
-      if (loadedGlobal && typeof loadedGlobal.getDocument === "function") {
-        return loadedGlobal;
-      }
-      errors.push(`${src}: loaded but pdfjsLib missing`);
-    } catch (err) {
-      errors.push(`${src}: ${err.message}`);
-    }
+  await loadScript(PDFJS_CDN_MAIN);
+  const loadedGlobal = resolvePdfJsGlobal();
+  if (loadedGlobal && typeof loadedGlobal.getDocument === "function") {
+    return loadedGlobal;
   }
 
-  throw new Error(errors.join(" | "));
+  throw new Error(`${PDFJS_CDN_MAIN}: loaded but pdfjsLib missing`);
 }
 
 function updateDocSwapButton() {
