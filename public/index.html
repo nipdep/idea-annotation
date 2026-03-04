@@ -14,10 +14,9 @@
 
     <header class="app-header">
       <div class="app-brand">
-        <img class="app-logo" src="assets/icon.png" alt="Idea Annotator" />
         <div>
-          <div class="app-title">Idea<span class="required tight">*</span> Annotator</div>
-          <div class="app-subtitle">Annotate concepts and arguments with grounded evidence.</div>
+          <div class="app-title">Idea<span class="required tight">*</span>Annotator</div>
+          <div class="app-subtitle">Argument discourse annotation in scientific publications..</div>
         </div>
       </div>
       <nav class="header-tabs">
@@ -42,12 +41,12 @@
 
         <section class="panel scrollable" id="metadataPanel">
           <div class="panel-header">
-            <h2>Bibliographic Data</h2>
+            <h2>Paper & Annotation Data</h2>
           </div>
           <div id="metadataForm" class="stack"></div>
 
           <div class="list-block">
-            <div class="subhead">Concepts</div>
+            <div class="subhead">Artifacts</div>
             <div id="conceptList" class="list"></div>
           </div>
 
@@ -55,32 +54,23 @@
             <div class="subhead">Arguments</div>
             <div id="argumentList" class="list"></div>
           </div>
+
+          <div class="list-block">
+            <div class="subhead">Descriptors</div>
+            <div id="descriptorList" class="list"></div>
+          </div>
         </section>
 
-        <section class="panel" id="submitPanel">
-          <div class="panel-header">
-            <h2>Submission</h2>
-          </div>
-          <button id="submitBtn" class="primary">Submit Annotations</button>
-        </section>
         <button id="leftCollapseBtn" class="collapse-handle" type="button" aria-label="Collapse sidebar"></button>
       </aside>
 
       <section class="panel doc-panel">
         <div class="panel-header">
           <h2>Document</h2>
+          <button id="docSwapBtn" class="icon-btn doc-swap" type="button" aria-label="Swap document view" title="Show parsed view"></button>
           <button id="docExpandBtn" class="icon-btn" type="button" aria-label="Expand document view" title="Expand document view"></button>
-          <button id="docSwapBtn" class="icon-btn doc-swap" type="button" aria-label="Swap document view" title="Swap document view"></button>
         </div>
-        <div id="docTextPane" class="doc-pane active">
-          <div id="docView" class="doc-view"></div>
-        </div>
-        <div id="docPdfPane" class="doc-pane">
-          <div class="pdf-wrap">
-            <div id="pdfPlaceholder" class="muted">Upload a paper to view the PDF.</div>
-            <iframe id="pdfFrame" title="PDF preview"></iframe>
-          </div>
-        </div>
+        <div id="docView" class="doc-view pdf-viewer"></div>
       </section>
 
       <aside class="right-stack">
@@ -90,23 +80,24 @@
           </div>
 
           <div class="tab-bar">
-            <button class="tab active" data-tab="concept">Concept</button>
+            <button class="tab active" data-tab="concept">Artifact</button>
             <button class="tab" data-tab="argument">Argument</button>
+            <button class="tab" data-tab="descriptor">Descriptor</button>
           </div>
 
           <div id="conceptTab" class="tab-content active">
             <div class="stack">
               <label>Label <span class="required">*</span><input id="conceptLabel" type="text" placeholder="e.g., Latent Dirichlet Allocation" /></label>
               <label>Aliases <input id="conceptAliases" type="text" placeholder="Comma-separated" /></label>
-              <label>Category <span class="required">*</span></label>
-              <div id="conceptTypePicker" class="type-picker"></div>
-              <div id="conceptTypePath" class="muted"></div>
+              <label>Category <span class="required">*</span>
+                <select id="artifactType"></select>
+              </label>
             </div>
             <div class="stack source-refs">
               <div class="subhead">Source refs</div>
               <div id="highlightPicker"></div>
             </div>
-            <button id="addConceptBtn">Add Concept</button>
+            <button id="addConceptBtn">Add Artifact</button>
           </div>
 
           <div id="argumentTab" class="tab-content">
@@ -117,9 +108,10 @@
               <label>Type <span class="required">*</span>
                 <select id="argumentType"></select>
               </label>
-              <label>Concept refs
+              <label>Artifact refs
                 <div id="argumentConceptRefs" class="tag-list"></div>
               </label>
+              <div id="argumentArtifactRelations" class="relation-editor hidden"></div>
             </div>
             <div class="stack source-refs">
               <div class="subhead">Source refs</div>
@@ -128,14 +120,28 @@
             <button id="addArgumentBtn">Add Argument</button>
           </div>
 
+          <div id="descriptorTab" class="tab-content">
+            <div class="stack">
+              <label>Type <span class="required">*</span>
+                <select id="descriptorType"></select>
+              </label>
+              <label>Artifact refs
+                <div id="descriptorConceptRefs" class="tag-list"></div>
+              </label>
+              <div id="descriptorArtifactRelations" class="relation-editor hidden"></div>
+            </div>
+            <div class="stack source-refs">
+              <div class="subhead">Source refs</div>
+              <div id="highlightPickerDescriptor"></div>
+            </div>
+            <button id="addDescriptorBtn">Add Descriptor</button>
+          </div>
         </section>
 
-        <section class="panel" id="flowPanel">
-          <div class="panel-header">
-            <h2>Suggested Flow</h2>
-          </div>
-          <div id="flowGuide" class="flow-list"></div>
+        <section class="panel submit-panel-min">
+          <button id="submitBtn" class="primary">Submit Annotations</button>
         </section>
+
       </aside>
       </main>
     </div>
@@ -150,19 +156,25 @@
           <div class="stack">
             <div>
               <div class="subhead">Core Objects</div>
-              <p>Annotate only two objects: Concepts (entities) and Arguments (canonical statements). No relations or extra structure.</p>
+              <p>Annotate three objects: Artifacts (entities), Arguments (canonical statements), and Descriptors.</p>
             </div>
 
             <div>
-              <div class="subhead">Concepts</div>
+              <div class="subhead">Artifacts</div>
               <p>Choose the most specific category available. You can stop at any level if no finer match exists.</p>
-              <p>Required fields: label, category, roles.</p>
+              <p>Required fields: label and category.</p>
             </div>
 
             <div>
               <div class="subhead">Arguments</div>
-              <p>Required fields: canonical text and argument type. Concept refs are optional.</p>
+              <p>Required fields: canonical text and argument type. Artifact refs are optional.</p>
               <p>Required types for submission: issue, idea, approach, claim.</p>
+            </div>
+
+            <div>
+              <div class="subhead">Descriptors</div>
+              <p>Required fields: descriptor type and source refs. Artifact refs are optional.</p>
+              <p>Descriptor type values: description, definition, composition, comparison, limitation.</p>
             </div>
 
             <div>
@@ -185,7 +197,7 @@
     <section id="libraryPage" class="page">
       <div class="library">
         <div class="library-controls">
-          <input id="librarySearch" type="text" placeholder="Search papers, concepts, arguments..." />
+          <input id="librarySearch" type="text" placeholder="Search papers, artifacts, arguments, descriptors..." />
           <div class="view-toggle">
             <button class="toggle active" data-view="table">Table View</button>
             <button class="toggle" data-view="graph">Graph View</button>
@@ -201,7 +213,7 @@
                     <th>Title</th>
                     <th>Year</th>
                     <th>Venue</th>
-                    <th>Concepts</th>
+                    <th>Artifacts</th>
                     <th>Arguments</th>
                   </tr>
                 </thead>
@@ -231,8 +243,10 @@
     </footer>
 
     <div id="selectionMenu" class="selection-menu hidden">
-      <button type="button" data-action="concept">Add to Concept Context</button>
+      <button type="button" data-action="concept">Add to Artifact Context</button>
       <button type="button" data-action="argument">Add to Argument Context</button>
+      <button type="button" data-action="descriptor">Add to Descriptor Context</button>
+      <button type="button" data-action="abstract">Mark as Abstract</button>
     </div>
 
     <div id="toastContainer" class="toast-container"></div>

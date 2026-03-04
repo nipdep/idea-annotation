@@ -84,52 +84,91 @@ function extractMetadata(tei) {
   };
 }
 
+function extractParagraphs(node) {
+  const directParagraphs = toArray(node?.p)
+    .map((p) => cleanText(collectText(p)))
+    .filter(Boolean);
+  if (directParagraphs.length) return directParagraphs;
+  const raw = cleanText(collectText(node));
+  return raw ? [raw] : [];
+}
+
+function extractAbstract(tei) {
+  const front = tei.TEI?.text?.front || {};
+  return extractParagraphs(front.abstract);
+}
+
 function extractSections(tei) {
   const body = tei.TEI?.text?.body;
   if (!body) return [];
 
   const divs = toArray(body.div);
-  if (divs.length === 0 && body.p) {
-    const paragraphs = toArray(body.p)
-      .map((p) => cleanText(collectText(p)))
-      .filter(Boolean);
-    return [
-      {
-        id: "body",
-        title: "Body",
-        paragraphs,
-      },
-    ];
+  if (divs.length === 0) {
+    const paragraphs = extractParagraphs(body);
+    return paragraphs.length
+      ? [{ id: "body", title: "Body", paragraphs }]
+      : [];
   }
 
-  return divs.map((div, index) => {
-    const title = cleanText(collectText(div.head)) || `Section ${index + 1}`;
-    const paragraphs = toArray(div.p)
-      .map((p) => cleanText(collectText(p)))
-      .filter(Boolean);
-    return {
-      id: `sec_${index + 1}`,
-      title,
-      paragraphs,
-    };
-  });
+  return divs
+    .map((div, index) => {
+      const title = cleanText(collectText(div.head)) || `Section ${index + 1}`;
+      const paragraphs = extractParagraphs(div);
+      if (!paragraphs.length) return null;
+      return {
+        id: `sec_${index + 1}`,
+        title,
+        paragraphs,
+      };
+    })
+    .filter(Boolean);
+}
+
+function extractReferences(tei) {
+  const back = tei.TEI?.text?.back || {};
+  const listBibl =
+    back.listBibl ||
+    toArray(back.div).map((div) => div?.listBibl).find(Boolean) ||
+    null;
+
+  return toArray(listBibl?.biblStruct)
+    .map((entry) => cleanText(collectText(entry)))
+    .filter(Boolean);
 }
 
 function teiToDoc(teiXml) {
   const tei = parser.parse(teiXml);
   const metadata = extractMetadata(tei);
+  const abstract = extractAbstract(tei);
   const sections = extractSections(tei);
-  return { metadata, doc: { sections } };
+  const references = extractReferences(tei);
+  return { metadata, doc: { abstract, sections, references } };
 }
 
 function docToMarkdown(doc) {
-  const sections = doc.sections || [];
   const parts = [];
+  const abstract = Array.isArray(doc?.abstract) ? doc.abstract : [];
+  const sections = Array.isArray(doc?.sections) ? doc.sections : [];
+  const references = Array.isArray(doc?.references) ? doc.references : [];
+
+  if (abstract.length) {
+    parts.push("# Abstract");
+    abstract.forEach((paragraph) => parts.push(paragraph));
+    parts.push("");
+  }
+
   sections.forEach((section) => {
     parts.push(`# ${section.title}`);
-    (section.paragraphs || []).forEach((p) => parts.push(p));
+    (section.paragraphs || []).forEach((paragraph) => parts.push(paragraph));
     parts.push("");
   });
+
+  if (references.length) {
+    parts.push("# References");
+    references.forEach((ref) => parts.push(`- ${ref}`));
+    parts.push("");
+  }
+
   return parts.join("\n\n").trim() + "\n";
 }
 
