@@ -503,19 +503,9 @@ async function detectAbstractFromPdf(pdfPath) {
     }
 
     debug.firstBodyIndex = bodyStartIndex;
-    let blankRun = 0;
 
-    for (let i = bodyStartIndex; i < rawLines.length; i += 1) {
-      const rawLine = String(rawLines[i] || "");
-      const line = sanitizeInlineText(rawLine);
-
-      if (!line) {
-        blankRun += 1;
-        if (collected.length && blankRun >= 2) break;
-        continue;
-      }
-
-      blankRun = 0;
+    for (let i = bodyStartIndex; i < normalizedLines.length; i += 1) {
+      const line = normalizedLines[i];
       if (i !== bodyStartIndex && isLikelySectionHeading(line)) break;
       collected.push(line);
     }
