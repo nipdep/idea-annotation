@@ -67,6 +67,17 @@ function normalizeAbstractLines(lines) {
     .filter(Boolean);
 }
 
+function joinParagraphLines(lines) {
+  return normalizeAbstractLines(lines).reduce((acc, line) => {
+    if (!line) return acc;
+    if (!acc) return line;
+    if (acc.endsWith("-")) {
+      return `${acc.slice(0, -1)}${line}`;
+    }
+    return `${acc} ${line}`;
+  }, "");
+}
+
 async function loadPdfJsNodeModule() {
   if (!pdfJsNodeModulePromise) {
     pdfJsNodeModulePromise = (async () => {
@@ -381,6 +392,8 @@ async function detectAbstractFromPdf(pdfPath) {
     });
     const pdf = await loadingTask.promise;
     const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 1 });
+    const pageWidth = Number(viewport?.width) || 600;
     const textContent = await page.getTextContent();
     const rawItems = Array.isArray(textContent?.items) ? textContent.items : [];
     const items = rawItems
@@ -427,17 +440,44 @@ async function detectAbstractFromPdf(pdfPath) {
     });
 
     const normalizedLines = lines
-      .map((line) => ({
-        y: line.y,
-        text: sanitizeInlineText(
-          line.items
-            .slice()
-            .sort((a, b) => a.x - b.x)
-            .map((item) => item.str)
-            .join(" ")
-        ),
-      }))
+      .map((line) => {
+        const sortedItems = line.items.slice().sort((a, b) => a.x - b.x);
+        const xMin = sortedItems[0]?.x || 0;
+        const xMax = sortedItems.reduce(
+          (max, item) => Math.max(max, item.x + item.width),
+          xMin
+        );
+        const avgHeight =
+          sortedItems.reduce((sum, item) => sum + (item.height || 0), 0) /
+            (sortedItems.length || 1) || 0;
+        return {
+          y: line.y,
+          xMin,
+          xMax,
+          width: Math.max(0, xMax - xMin),
+          avgHeight,
+          text: sanitizeInlineText(sortedItems.map((item) => item.str).join(" ")),
+        };
+      })
       .filter((line) => line.text);
+
+    const isLikelySectionHeading = (line) => {
+      const text = String(line?.text || "");
+      if (!text) return false;
+      if (/^(keywords|index terms)\b/i.test(text)) return true;
+      if (/^(\d+[\.\)]?\s+)?introduction\b/i.test(text)) return true;
+      if (/^(references|acknowledg(e)?ments?)\b/i.test(text)) return true;
+      if (/^\d+(\.\d+)*\s+[A-Z]/.test(text)) return true;
+      const words = text.split(/\s+/).filter(Boolean);
+      if (
+        words.length <= 6 &&
+        text === text.toUpperCase() &&
+        line.width <= pageWidth * 0.75
+      ) {
+        return true;
+      }
+      return false;
+    };
 
     let headingIndex = normalizedLines.findIndex((line) =>
       /^abstract\b[:.\-–—]*$/i.test(line.text)
@@ -446,36 +486,53 @@ async function detectAbstractFromPdf(pdfPath) {
       headingIndex = normalizedLines.findIndex(
         (line) =>
           /\babstract\b/i.test(line.text) &&
-          line.text.split(/\s+/).length <= 6
+          line.text.split(/\s+/).length <= 6 &&
+          line.width <= pageWidth * 0.55
       );
     }
     if (headingIndex < 0) return "";
 
     const collected = [];
-    const headingText = normalizedLines[headingIndex].text;
+    const headingLine = normalizedLines[headingIndex];
+    const headingText = headingLine.text;
     const sameLine = headingText.match(/^abstract\b[:.\-–—]*\s*(.+)$/i);
     if (sameLine?.[1]) {
       collected.push(sameLine[1]);
     }
 
+    let bodyStartIndex = -1;
     for (let i = headingIndex + 1; i < normalizedLines.length; i += 1) {
-      const current = normalizedLines[i].text;
-      if (!current) continue;
-      if (/^(keywords|index terms)\b/i.test(current)) break;
-      if (/^(\d+[\.\)]?\s+)?introduction\b/i.test(current)) break;
-      if (/^(references|acknowledg(e)?ments?)\b/i.test(current)) break;
-      if (
-        collected.length > 0 &&
-        current.split(/\s+/).length <= 5 &&
-        /^[A-Z0-9][A-Za-z0-9\s\-:]+$/.test(current) &&
-        current === current.toUpperCase()
-      ) {
+      const line = normalizedLines[i];
+      const words = line.text.split(/\s+/).filter(Boolean);
+      if (isLikelySectionHeading(line)) break;
+      if (words.length >= 5 || line.width >= pageWidth * 0.3) {
+        bodyStartIndex = i;
         break;
       }
-      collected.push(current);
+    }
+    if (bodyStartIndex < 0) {
+      return sanitizeInlineText(joinParagraphLines(collected));
     }
 
-    return sanitizeInlineText(normalizeAbstractLines(collected).join(" "));
+    const firstBodyLine = normalizedLines[bodyStartIndex];
+    const paragraphLeft = firstBodyLine.xMin;
+    let previousLine = firstBodyLine;
+
+    for (let i = bodyStartIndex; i < normalizedLines.length; i += 1) {
+      const line = normalizedLines[i];
+      if (isLikelySectionHeading(line)) break;
+
+      const yGap = Math.max(0, previousLine.y - line.y);
+      const maxGap = Math.max(20, Math.max(previousLine.avgHeight, line.avgHeight) * 3.2);
+      if (i > bodyStartIndex && yGap > maxGap) break;
+
+      if (i > bodyStartIndex && line.xMin < paragraphLeft - 60) break;
+
+      collected.push(line.text);
+      previousLine = line;
+    }
+
+    return sanitizeInlineText(joinParagraphLines(collected));
   } catch (err) {
     console.warn(`[abstract] ${path.basename(pdfPath)}: ${err.message}`);
     return "";
