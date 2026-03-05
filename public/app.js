@@ -58,6 +58,11 @@ const state = {
   parsedReady: false,
   parseStatusTimer: null,
   parseStatusToast: null,
+  pdfZoom: 1,
+  minPdfZoom: 0.6,
+  maxPdfZoom: 2.6,
+  pdfZoomStep: 0.2,
+  pdfLayoutTimer: null,
   highlights: [],
   pendingSelection: null,
   argumentDescription: "",
@@ -217,6 +222,56 @@ function updateDocSwapButton() {
   const label = state.docMode === "pdf" ? "Show parsed view" : "Show PDF view";
   button.title = label;
   button.setAttribute("aria-label", label);
+}
+
+function updatePdfZoomControls() {
+  const controls = el("pdfZoomControls");
+  const zoomOut = el("pdfZoomOutBtn");
+  const zoomIn = el("pdfZoomInBtn");
+  const zoomReset = el("pdfZoomResetBtn");
+  const label = el("pdfZoomLabel");
+  if (!controls || !zoomOut || !zoomIn || !zoomReset || !label) return;
+
+  const show = state.docMode === "pdf" && !!state.paperId;
+  controls.style.display = show ? "inline-flex" : "none";
+  if (!show) return;
+
+  const zoomPercent = Math.round(state.pdfZoom * 100);
+  label.textContent = `${zoomPercent}%`;
+  zoomOut.disabled = state.pdfZoom <= state.minPdfZoom + 0.001;
+  zoomIn.disabled = state.pdfZoom >= state.maxPdfZoom - 0.001;
+  zoomReset.disabled = Math.abs(state.pdfZoom - 1) < 0.01;
+}
+
+function setPdfZoom(nextZoom) {
+  const clamped = clamp(nextZoom, state.minPdfZoom, state.maxPdfZoom);
+  if (Math.abs(clamped - state.pdfZoom) < 0.001) return;
+  state.pdfZoom = clamped;
+  updatePdfZoomControls();
+  if (state.docMode === "pdf") {
+    renderPdfDoc();
+  }
+}
+
+function zoomPdfBy(step) {
+  setPdfZoom(Number((state.pdfZoom + step).toFixed(2)));
+}
+
+function resetPdfZoom() {
+  setPdfZoom(1);
+}
+
+function schedulePdfRerender(delayMs = 180) {
+  if (state.pdfLayoutTimer) {
+    clearTimeout(state.pdfLayoutTimer);
+    state.pdfLayoutTimer = null;
+  }
+  state.pdfLayoutTimer = setTimeout(() => {
+    state.pdfLayoutTimer = null;
+    if (state.docMode === "pdf" && state.paperId) {
+      renderPdfDoc();
+    }
+  }, delayMs);
 }
 
 function clearParseStatusMonitor(removeToast = false) {
@@ -2852,7 +2907,8 @@ async function renderPdfDoc() {
       if (renderSeq !== state.pdfRenderSeq) return;
 
       const baseViewport = page.getViewport({ scale: 1 });
-      const scale = Math.max(0.8, Math.min(1.8, availableWidth / baseViewport.width));
+      const fitScale = availableWidth / baseViewport.width;
+      const scale = clamp(fitScale * state.pdfZoom, 0.4, 4);
       const viewport = page.getViewport({ scale });
 
       const pageEl = document.createElement("div");
@@ -2908,6 +2964,7 @@ async function renderDoc() {
     docView.classList.toggle("pdf-viewer", state.docMode === "pdf");
   }
   updateDocSwapButton();
+  updatePdfZoomControls();
   if (state.docMode === "text") {
     renderParsedDoc();
     return;
@@ -3483,6 +3540,7 @@ async function uploadPdf() {
   state.annotations = normalizeAnnotations(data.annotation);
   state.metadataChecks = data.annotation?.metadata_checks || {};
   state.docMode = "pdf";
+  state.pdfZoom = 1;
   state.highlights = [];
   state.virtualHighlightSeq = 0;
   state.argumentDescription = "";
@@ -3651,6 +3709,7 @@ function init() {
       const page = el("annotatorPage");
       if (!page) return;
       page.classList.toggle("left-collapsed");
+      schedulePdfRerender(220);
     });
   }
 
@@ -3660,6 +3719,7 @@ function init() {
       const page = el("annotatorPage");
       if (!page) return;
       page.classList.toggle("doc-expanded");
+      schedulePdfRerender(220);
     });
   }
 
@@ -3667,6 +3727,44 @@ function init() {
   if (docSwapBtn) {
     docSwapBtn.addEventListener("click", toggleDocMode);
   }
+
+  const pdfZoomOutBtn = el("pdfZoomOutBtn");
+  if (pdfZoomOutBtn) {
+    pdfZoomOutBtn.addEventListener("click", () => zoomPdfBy(-state.pdfZoomStep));
+  }
+
+  const pdfZoomInBtn = el("pdfZoomInBtn");
+  if (pdfZoomInBtn) {
+    pdfZoomInBtn.addEventListener("click", () => zoomPdfBy(state.pdfZoomStep));
+  }
+
+  const pdfZoomResetBtn = el("pdfZoomResetBtn");
+  if (pdfZoomResetBtn) {
+    pdfZoomResetBtn.addEventListener("click", resetPdfZoom);
+  }
+
+  const docView = el("docView");
+  if (docView) {
+    docView.addEventListener(
+      "wheel",
+      (event) => {
+        if (state.docMode !== "pdf" || !event.ctrlKey) return;
+        event.preventDefault();
+        if (event.deltaY < 0) {
+          zoomPdfBy(state.pdfZoomStep);
+        } else {
+          zoomPdfBy(-state.pdfZoomStep);
+        }
+      },
+      { passive: false }
+    );
+  }
+
+  window.addEventListener("resize", () => {
+    if (state.docMode === "pdf" && state.paperId) {
+      schedulePdfRerender(160);
+    }
+  });
 }
 
 init();

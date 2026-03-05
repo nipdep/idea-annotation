@@ -449,6 +449,48 @@ button:hover {
   justify-content: center;
 }
 
+#pdfZoomControls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.zoom-btn {
+  width: 28px;
+  height: 28px;
+}
+
+#pdfZoomOutBtn::before {
+  content: "−";
+  font-size: 18px;
+  line-height: 1;
+}
+
+#pdfZoomInBtn::before {
+  content: "+";
+  font-size: 18px;
+  line-height: 1;
+}
+
+#pdfZoomResetBtn::before {
+  content: "⤢";
+  font-size: 14px;
+  line-height: 1;
+}
+
+.zoom-label {
+  min-width: 48px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.zoom-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 #docExpandBtn::before {
   content: "+";
 }
