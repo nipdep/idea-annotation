@@ -112,3 +112,18 @@ dataset/
     paper_xxx.json
 ```
 
+## error
+```
+$ BASE_PATH=/idea-annotator npm run dev
+
+> idea-viewer@0.1.0 dev
+> vite --host 0.0.0.0 --strictPort
+
+error when starting dev server:
+Error: Port 5173 is already in use
+    at Server.onError (file:///home/nipdep/Dev/idea-viewer/node_modules/vite/dist/node/chunks/dep-D4NMHUTW.js:25023:18)
+    at Server.emit (node:events:517:28)
+    at emitErrorNT (node:net:1838:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21)
+
+```
