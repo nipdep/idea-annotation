@@ -3741,7 +3741,14 @@ function init() {
   wireLibraryControls();
   wireSelectionMenu();
 
-  el("uploadBtn").addEventListener("click", uploadPdf);
+  const pdfInput = el("pdfInput");
+  if (pdfInput) {
+    pdfInput.addEventListener("change", () => {
+      if (pdfInput.files && pdfInput.files.length) {
+        uploadPdf();
+      }
+    });
+  }
   window.addEventListener("beforeunload", revokeLocalPdfUrl);
   el("docView").addEventListener("mouseup", handleDocSelection);
   el("docView").addEventListener("touchend", handleDocSelection);
