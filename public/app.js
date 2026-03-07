@@ -1,36 +1,35 @@
 const artifactTypes = [
-  "algorithm",
-  "component",
-  "dataset",
-  "framework",
-  "hyperparameter",
-  "metric",
-  "model",
-  "task",
-  "resource",
+  "Model",
+  "Dataset",
+  "Framework",
+  "Algorithm",
+  "Task",
+  "Metric",
+  "Component",
+  "Hyperparameter",
+  "Resourcez",
 ];
 
 const argumentTypes = [
-  "issue",
-  "backing",
-  "idea",
-  "approach",
-  "experiment",
-  "experiment design",
-  "experiment goal",
-  "experiment hypothesis",
-  "experiment result",
-  "claim",
-  "warrant",
-  "central argument",
+  "Issue",
+  "Idea",
+  "Approach",
+  "Evidence",
+  "Claim",
+  "Warrant",
+  "Backing",
+  "Qualifier",
+  "Rebuttal",
 ];
 
 const descriptorTypes = [
-  "description",
-  "definition",
-  "composition",
-  "comparison",
-  "limitation",
+  "Definition",
+  "Composition",
+  "Usage",
+  "Setting",
+  "Assumption",
+  "Limitation",
+  "Comparison",
 ];
 
 const artifactRelationTypes = [
@@ -803,6 +802,20 @@ function formatRelationLabel(value) {
   return String(value || "").replace(/^sudo:/, "");
 }
 
+function resolveArtifactTypeValue(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const matched = artifactTypes.find((type) => type.toLowerCase() === raw.toLowerCase());
+  return matched || raw;
+}
+
+function resolveOptionValue(options, value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const matched = options.find((option) => option.toLowerCase() === raw.toLowerCase());
+  return matched || raw;
+}
+
 function uniqueId(prefix, list) {
   const next = list.length + 1;
   return `${prefix}${String(next).padStart(2, "0")}`;
@@ -1123,7 +1136,7 @@ function applySavedHighlightsToPdf() {
 function renderArtifactTypeSelect() {
   const select = el("artifactType");
   if (!select) return;
-  const current = state.conceptType || "";
+  const current = resolveArtifactTypeValue(state.conceptType || "");
   select.innerHTML = "";
 
   const placeholder = document.createElement("option");
@@ -1140,7 +1153,7 @@ function renderArtifactTypeSelect() {
 
   select.value = artifactTypes.includes(current) ? current : "";
   select.onchange = (event) => {
-    state.conceptType = event.target.value || "";
+    state.conceptType = resolveArtifactTypeValue(event.target.value || "");
   };
 }
 
@@ -1273,7 +1286,7 @@ function startConceptEdit(conceptId) {
   activateAnnotationTab("concept");
   el("conceptLabel").value = concept.label || "";
   el("conceptAliases").value = (concept.aliases || []).join(", ");
-  state.conceptType = String(concept.type || "").trim().toLowerCase();
+  state.conceptType = resolveArtifactTypeValue(concept.type || "");
   const typeSelect = el("artifactType");
   if (typeSelect) typeSelect.value = state.conceptType;
   hydrateSourceRefsForEdit("concept", concept.source_refs, true);
@@ -1293,7 +1306,7 @@ function startArgumentEdit(argumentId) {
   state.editing.argumentId = argumentId;
   activateAnnotationTab("argument");
   el("argumentText").value = argument.text || "";
-  el("argumentType").value = argument.arg_type || argumentTypes[0];
+  el("argumentType").value = resolveOptionValue(argumentTypes, argument.arg_type) || argumentTypes[0];
   state.argumentDescription = argument.description || "";
   hydrateArgumentRefsFromDescription(argument.description, argument.source_refs);
   renderArgumentConceptRefs();
@@ -1324,7 +1337,8 @@ function startDescriptorEdit(descriptorId) {
   }
   state.editing.descriptorId = descriptorId;
   activateAnnotationTab("descriptor");
-  el("descriptorType").value = descriptor.descriptor_type || descriptorTypes[0];
+  el("descriptorType").value =
+    resolveOptionValue(descriptorTypes, descriptor.descriptor_type) || descriptorTypes[0];
   hydrateSourceRefsForEdit("descriptor", descriptor.source_refs, false);
   renderDescriptorConceptRefs();
   const selected = new Set(descriptor.concept_refs || []);
@@ -3406,7 +3420,7 @@ function createConcept() {
   }
 
   const aliases = normalizeAliases(el("conceptAliases").value);
-  const type = String(el("artifactType")?.value || state.conceptType || "").trim().toLowerCase();
+  const type = resolveArtifactTypeValue(el("artifactType")?.value || state.conceptType || "");
   state.conceptType = type;
   if (!type) {
     showToast("Select an artifact category.", "error");
