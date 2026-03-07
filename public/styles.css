@@ -758,6 +758,26 @@ textarea[readonly] {
   gap: 12px;
 }
 
+.metadata-block {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px 10px;
+}
+
+.metadata-block summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--accent-2);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.8rem;
+}
+
+.metadata-inner {
+  margin-top: 10px;
+}
+
 .meta-field {
   display: grid;
   gap: 6px;

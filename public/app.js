@@ -2593,6 +2593,18 @@ function wireLibraryControls() {
 function renderMetadata() {
   const form = el("metadataForm");
   form.innerHTML = "";
+  const metadataBlock = document.createElement("details");
+  metadataBlock.className = "metadata-block";
+  metadataBlock.open = true;
+
+  const metadataSummary = document.createElement("summary");
+  metadataSummary.textContent = "Paper metadata";
+  metadataBlock.appendChild(metadataSummary);
+
+  const metadataInner = document.createElement("div");
+  metadataInner.className = "metadata-inner stack";
+  metadataBlock.appendChild(metadataInner);
+
   const fields = [
     { key: "title", label: "Title" },
     { key: "authors", label: "Authors" },
@@ -2669,7 +2681,7 @@ function renderMetadata() {
 
       details.appendChild(textarea);
       details.appendChild(listContainer);
-      form.appendChild(details);
+      metadataInner.appendChild(details);
       return;
     }
 
@@ -2710,8 +2722,10 @@ function renderMetadata() {
 
     wrapper.appendChild(row);
     wrapper.appendChild(input);
-    form.appendChild(wrapper);
+    metadataInner.appendChild(wrapper);
   });
+
+  form.appendChild(metadataBlock);
 }
 
 function renderParsedDoc() {
