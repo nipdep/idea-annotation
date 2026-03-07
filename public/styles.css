@@ -60,18 +60,6 @@ body {
   align-items: flex-end;
   padding: 16px 32px 8px;
   gap: 24px;
-  position: relative;
-}
-
-.app-header::after {
-  content: "";
-  position: absolute;
-  left: 20px;
-  right: 20px;
-  bottom: 0;
-  height: 2px;
-  background: rgba(30, 27, 22, 0.4);
-  z-index: 0;
 }
 
 .app-brand {
@@ -101,6 +89,7 @@ body {
 }
 
 .nav-tab {
+  position: relative;
   background: rgba(253, 248, 242, 0.94);
   border: 1px solid rgba(30, 27, 22, 0.1);
   border-bottom: 0;
@@ -129,6 +118,19 @@ body {
   border-color: var(--accent-2);
   padding-bottom: 13px;
   z-index: 2;
+}
+
+.nav-tab.active::after {
+  content: "";
+  position: absolute;
+  left: -6px;
+  right: -6px;
+  bottom: -4px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(42, 111, 110, 0.28);
+  filter: blur(0.4px);
+  pointer-events: none;
 }
 
 .page {
@@ -1116,18 +1118,6 @@ mark.used {
   gap: 0;
   align-items: flex-end;
   margin-bottom: 12px;
-  position: relative;
-}
-
-.tab-bar::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 2px;
-  background: rgba(30, 27, 22, 0.35);
-  z-index: 0;
 }
 
 .tab {
@@ -1161,6 +1151,19 @@ mark.used {
   border-color: var(--accent-2);
   padding-bottom: 9px;
   z-index: 2;
+}
+
+.tab.active::after {
+  content: "";
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  bottom: -3px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(42, 111, 110, 0.28);
+  filter: blur(0.4px);
+  pointer-events: none;
 }
 
 .tab-content {
