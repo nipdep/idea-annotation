@@ -3084,11 +3084,91 @@ function removeHighlightsForSourceRefs(target, sourceRefs) {
   consumedIds.forEach((id) => removeHighlight(id));
 }
 
+function findArtifactLabel(conceptId) {
+  const concept = (state.annotations.concepts || []).find((item) => item.concept_id === conceptId);
+  if (!concept) return conceptId;
+  return `${conceptId} ${concept.label || ""}`.trim();
+}
+
+function collectAnnotatedRelations() {
+  const rows = [];
+
+  (state.annotations.arguments || []).forEach((argument) => {
+    const relations = Array.isArray(argument.artifact_relations) ? argument.artifact_relations : [];
+    relations.forEach((relation, index) => {
+      rows.push({
+        ownerType: "Argument",
+        ownerId: argument.argument_id,
+        ownerTypeLabel: argument.arg_type ? formatTypeLabel(argument.arg_type) : "",
+        relation,
+        relationIndex: index,
+      });
+    });
+  });
+
+  (state.annotations.descriptors || []).forEach((descriptor) => {
+    const relations = Array.isArray(descriptor.artifact_relations) ? descriptor.artifact_relations : [];
+    relations.forEach((relation, index) => {
+      rows.push({
+        ownerType: "Descriptor",
+        ownerId: descriptor.descriptor_id,
+        ownerTypeLabel: descriptor.descriptor_type ? formatTypeLabel(descriptor.descriptor_type) : "",
+        relation,
+        relationIndex: index,
+      });
+    });
+  });
+
+  return rows;
+}
+
+function renderRelationList() {
+  const list = el("relationList");
+  if (!list) return;
+  list.innerHTML = "";
+
+  const rows = collectAnnotatedRelations();
+  if (!rows.length) {
+    list.innerHTML = '<div class="muted">No relations yet.</div>';
+    return;
+  }
+
+  rows.forEach((row) => {
+    const sourceId = row.relation?.source_artifact_id || "";
+    const targetId = row.relation?.target_artifact_id || "";
+    const relationType = String(row.relation?.relation_type || "").replace(/^sudo:/, "");
+    const sourceLabel = findArtifactLabel(sourceId);
+    const targetLabel = findArtifactLabel(targetId);
+
+    const item = document.createElement("div");
+    item.className = "list-item relation-item";
+
+    const info = document.createElement("div");
+    info.innerHTML = `
+      <div><strong>${row.ownerType} ${row.ownerId}</strong>${row.ownerTypeLabel ? ` • ${row.ownerTypeLabel}` : ""}</div>
+      <div class="meta">${sourceLabel} → ${targetLabel}</div>
+      <div class="meta">${relationType || "Relation"}</div>
+    `;
+
+    info.addEventListener("click", () => {
+      if (row.ownerType === "Argument") {
+        startArgumentEdit(row.ownerId);
+      } else {
+        startDescriptorEdit(row.ownerId);
+      }
+    });
+
+    item.appendChild(info);
+    list.appendChild(item);
+  });
+}
+
 function renderConceptList() {
   const list = el("conceptList");
   list.innerHTML = "";
   if (state.annotations.concepts.length === 0) {
     list.innerHTML = '<div class="muted">No artifacts yet.</div>';
+    renderRelationList();
     return;
   }
 
@@ -3128,6 +3208,8 @@ function renderConceptList() {
     item.appendChild(remove);
     list.appendChild(item);
   });
+
+  renderRelationList();
 }
 
 function renderArgumentList() {
@@ -3135,6 +3217,7 @@ function renderArgumentList() {
   list.innerHTML = "";
   if (state.annotations.arguments.length === 0) {
     list.innerHTML = '<div class="muted">No arguments yet.</div>';
+    renderRelationList();
     return;
   }
 
@@ -3174,6 +3257,8 @@ function renderArgumentList() {
     item.appendChild(remove);
     list.appendChild(item);
   });
+
+  renderRelationList();
 }
 
 function renderDescriptorList() {
@@ -3181,6 +3266,7 @@ function renderDescriptorList() {
   list.innerHTML = "";
   if (state.annotations.descriptors.length === 0) {
     list.innerHTML = '<div class="muted">No descriptors yet.</div>';
+    renderRelationList();
     return;
   }
 
@@ -3222,6 +3308,8 @@ function renderDescriptorList() {
     item.appendChild(remove);
     list.appendChild(item);
   });
+
+  renderRelationList();
 }
 
 function renderArgumentConceptRefs() {
