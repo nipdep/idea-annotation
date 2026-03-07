@@ -70,7 +70,7 @@ body {
   content: "";
   position: absolute;
   bottom: 8px;
-  height: 2px;
+  height: 1.5px;
   background: rgba(42, 111, 110, 0.38);
   pointer-events: none;
   z-index: 1;
@@ -122,7 +122,7 @@ body {
   font-size: 1rem;
   border-radius: 12px 12px 0 0;
   margin-left: -1px;
-  margin-bottom: 0;
+  margin-bottom: 2px;
   box-shadow: none;
 }
 
@@ -141,6 +141,7 @@ body {
   color: #fff;
   border-color: var(--accent-2);
   padding-bottom: 13px;
+  margin-bottom: 0;
   z-index: 2;
 }
 
@@ -1143,7 +1144,7 @@ mark.used {
   content: "";
   position: absolute;
   bottom: 1px;
-  height: 2px;
+  height: 1.5px;
   background: rgba(42, 111, 110, 0.35);
   pointer-events: none;
   z-index: 0;
@@ -1168,7 +1169,7 @@ mark.used {
   padding: 5px 14px 8px;
   min-height: 30px;
   margin-left: -1px;
-  margin-bottom: 0;
+  margin-bottom: 2px;
   box-shadow: none;
   position: relative;
   z-index: 1;
@@ -1189,6 +1190,7 @@ mark.used {
   color: #fff;
   border-color: var(--accent-2);
   padding-bottom: 9px;
+  margin-bottom: 0;
   z-index: 2;
 }
 
