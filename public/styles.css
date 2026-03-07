@@ -60,6 +60,30 @@ body {
   align-items: flex-end;
   padding: 16px 32px 8px;
   gap: 24px;
+  position: relative;
+  --crease-left: 0px;
+  --crease-right: 100%;
+}
+
+.app-header::before,
+.app-header::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  height: 2px;
+  background: rgba(42, 111, 110, 0.38);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.app-header::before {
+  left: 0;
+  width: var(--crease-left);
+}
+
+.app-header::after {
+  left: var(--crease-right);
+  right: 0;
 }
 
 .app-brand {
@@ -86,7 +110,6 @@ body {
   align-items: flex-end;
   position: relative;
   z-index: 2;
-  overflow: hidden;
 }
 
 .nav-tab {
@@ -121,25 +144,8 @@ body {
   z-index: 2;
 }
 
-.nav-tab.active::before,
 .nav-tab.active::after {
-  content: "";
-  position: absolute;
-  bottom: -1px;
-  height: 2px;
-  background: rgba(42, 111, 110, 0.48);
-  pointer-events: none;
-}
-
-.nav-tab.active::before {
-  right: 100%;
-  width: 2000px;
-}
-
-.nav-tab.active::after {
-  left: 100%;
-  width: 2000px;
-  pointer-events: none;
+  content: none;
 }
 
 .page {
@@ -1128,7 +1134,29 @@ mark.used {
   align-items: flex-end;
   margin-bottom: 12px;
   position: relative;
-  overflow: hidden;
+  --crease-left: 0px;
+  --crease-right: 100%;
+}
+
+.tab-bar::before,
+.tab-bar::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  height: 2px;
+  background: rgba(42, 111, 110, 0.35);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.tab-bar::before {
+  left: 0;
+  width: var(--crease-left);
+}
+
+.tab-bar::after {
+  left: var(--crease-right);
+  right: 0;
 }
 
 .tab {
@@ -1164,25 +1192,8 @@ mark.used {
   z-index: 2;
 }
 
-.tab.active::before,
 .tab.active::after {
-  content: "";
-  position: absolute;
-  bottom: -1px;
-  height: 2px;
-  background: rgba(42, 111, 110, 0.48);
-  pointer-events: none;
-}
-
-.tab.active::before {
-  right: 100%;
-  width: 2000px;
-}
-
-.tab.active::after {
-  left: 100%;
-  width: 2000px;
-  pointer-events: none;
+  content: none;
 }
 
 .tab-content {

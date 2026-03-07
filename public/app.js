@@ -1205,6 +1205,7 @@ function activateAnnotationTab(tabName) {
   const content = el(`${tabName}Tab`);
   if (tab) tab.classList.add("active");
   if (content) content.classList.add("active");
+  updateNotebookCreases();
 }
 
 function setConceptButtonMode() {
@@ -2965,6 +2966,27 @@ function toggleDocMode() {
   renderDoc();
 }
 
+function setCreaseFromActive(container, activeTab) {
+  if (!container || !activeTab) return;
+  if (container.offsetParent === null || activeTab.offsetParent === null) return;
+  const containerRect = container.getBoundingClientRect();
+  const activeRect = activeTab.getBoundingClientRect();
+  const left = Math.max(0, Math.round(activeRect.left - containerRect.left));
+  const right = Math.max(left, Math.round(activeRect.right - containerRect.left));
+  container.style.setProperty("--crease-left", `${left}px`);
+  container.style.setProperty("--crease-right", `${right}px`);
+}
+
+function updateNotebookCreases() {
+  const appHeader = document.querySelector(".app-header");
+  const activeNavTab = document.querySelector(".header-tabs .nav-tab.active");
+  setCreaseFromActive(appHeader, activeNavTab);
+
+  const annotateTabBar = document.querySelector("#annotatePanel .tab-bar");
+  const activeBuilderTab = annotateTabBar?.querySelector(".tab.active");
+  setCreaseFromActive(annotateTabBar, activeBuilderTab);
+}
+
 function renderHighlightPickers() {
   const pickers = [
     { id: "highlightPicker", key: "concept" },
@@ -3693,6 +3715,7 @@ function wireTabs() {
       document.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
       tab.classList.add("active");
       el(`${tab.dataset.tab}Tab`).classList.add("active");
+      updateNotebookCreases();
       renderHighlightPickers();
     });
   });
@@ -3706,6 +3729,7 @@ function wireNavigation() {
       button.classList.add("active");
       const target = document.getElementById(button.dataset.page);
       if (target) target.classList.add("active");
+      updateNotebookCreases();
       if (button.dataset.page === "libraryPage" && !state.library.loaded) {
         fetchLibrary();
       }
@@ -3829,10 +3853,13 @@ function init() {
   }
 
   window.addEventListener("resize", () => {
+    updateNotebookCreases();
     if (state.docMode === "pdf" && state.paperId) {
       schedulePdfRerender(160);
     }
   });
+
+  requestAnimationFrame(updateNotebookCreases);
 }
 
 init();
