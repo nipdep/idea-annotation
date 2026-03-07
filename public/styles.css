@@ -82,18 +82,24 @@ body {
 
 .header-tabs {
   display: flex;
-  gap: 6px;
+  gap: 0;
   align-items: flex-end;
 }
 
 .nav-tab {
-  background: rgba(253, 248, 242, 0.9);
+  background: rgba(253, 248, 242, 0.94);
   border: 1px solid rgba(30, 27, 22, 0.1);
+  border-bottom: 0;
   color: var(--ink);
-  padding: 10px 18px;
+  padding: 10px 18px 12px;
   font-size: 1rem;
-  border-radius: 10px;
+  border-radius: 12px 12px 0 0;
+  margin-left: -1px;
   box-shadow: none;
+}
+
+.nav-tab:first-child {
+  margin-left: 0;
 }
 
 .nav-tab:hover {
@@ -106,6 +112,8 @@ body {
   background: var(--accent-2);
   color: #fff;
   border-color: var(--accent-2);
+  padding-bottom: 13px;
+  z-index: 2;
 }
 
 .page {
@@ -1090,19 +1098,25 @@ mark.used {
 
 .tab-bar {
   display: flex;
-  gap: 6px;
+  gap: 0;
   align-items: flex-end;
   margin-bottom: 12px;
 }
 
 .tab {
-  background: rgba(253, 248, 242, 0.9);
+  background: rgba(253, 248, 242, 0.94);
   border: 1px solid rgba(30, 27, 22, 0.1);
+  border-bottom: 0;
   color: var(--ink);
-  border-radius: 9px;
-  padding: 6px 14px;
-  min-height: 32px;
+  border-radius: 10px 10px 0 0;
+  padding: 5px 14px 8px;
+  min-height: 30px;
+  margin-left: -1px;
   box-shadow: none;
+}
+
+.tab:first-child {
+  margin-left: 0;
 }
 
 .tab:hover {
@@ -1115,6 +1129,8 @@ mark.used {
   background: var(--accent-2);
   color: #fff;
   border-color: var(--accent-2);
+  padding-bottom: 9px;
+  z-index: 2;
 }
 
 .tab-content {
