@@ -65,27 +65,6 @@ body {
   --crease-right: 100%;
 }
 
-.app-header::before,
-.app-header::after {
-  content: "";
-  position: absolute;
-  bottom: 8px;
-  height: 1.5px;
-  background: rgba(42, 111, 110, 0.38);
-  pointer-events: none;
-  z-index: 1;
-}
-
-.app-header::before {
-  left: 0;
-  width: var(--crease-left);
-}
-
-.app-header::after {
-  left: var(--crease-right);
-  right: 0;
-}
-
 .app-brand {
   display: flex;
   align-items: center;
@@ -106,28 +85,20 @@ body {
 
 .header-tabs {
   display: flex;
-  gap: 0;
-  align-items: flex-end;
+  gap: 8px;
+  align-items: center;
   position: relative;
   z-index: 2;
 }
 
 .nav-tab {
-  position: relative;
   background: rgba(253, 248, 242, 0.94);
   border: 1px solid rgba(30, 27, 22, 0.1);
-  border-bottom: 0;
   color: var(--ink);
-  padding: 10px 18px 12px;
+  padding: 10px 18px;
   font-size: 1rem;
-  border-radius: 12px 12px 0 0;
-  margin-left: -1px;
-  margin-bottom: 2px;
+  border-radius: 14px;
   box-shadow: none;
-}
-
-.nav-tab:first-child {
-  margin-left: 0;
 }
 
 .nav-tab:hover {
@@ -140,13 +111,6 @@ body {
   background: var(--accent-2);
   color: #fff;
   border-color: var(--accent-2);
-  padding-bottom: 13px;
-  margin-bottom: 0;
-  z-index: 2;
-}
-
-.nav-tab.active::after {
-  content: none;
 }
 
 .page {
@@ -731,33 +695,24 @@ textarea[readonly] {
 
 .builder-main-tabs {
   display: flex;
-  align-items: flex-end;
-  gap: 0;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 10px;
 }
 
 .builder-main-tab {
   background: rgba(253, 248, 242, 0.94);
   border: 1px solid rgba(30, 27, 22, 0.1);
-  border-bottom: 0;
   color: var(--ink);
-  border-radius: 10px 10px 0 0;
-  padding: 6px 14px 8px;
-  margin-left: -1px;
-  margin-bottom: 2px;
+  border-radius: 12px;
+  padding: 7px 14px;
   cursor: pointer;
-}
-
-.builder-main-tab:first-child {
-  margin-left: 0;
 }
 
 .builder-main-tab.active {
   background: var(--accent-2);
   color: #fff;
   border-color: var(--accent-2);
-  margin-bottom: 0;
-  padding-bottom: 10px;
 }
 
 .builder-panel {
@@ -1199,52 +1154,24 @@ mark.used {
 
 .tab-bar {
   display: flex;
-  gap: 0;
-  align-items: flex-end;
+  gap: 8px;
+  align-items: center;
   margin-bottom: 12px;
   position: relative;
   --crease-left: 0px;
   --crease-right: 100%;
 }
 
-.tab-bar::before,
-.tab-bar::after {
-  content: "";
-  position: absolute;
-  bottom: 1px;
-  height: 1.5px;
-  background: rgba(42, 111, 110, 0.35);
-  pointer-events: none;
-  z-index: 0;
-}
-
-.tab-bar::before {
-  left: 0;
-  width: var(--crease-left);
-}
-
-.tab-bar::after {
-  left: var(--crease-right);
-  right: 0;
-}
-
 .tab {
   background: rgba(253, 248, 242, 0.94);
   border: 1px solid rgba(30, 27, 22, 0.1);
-  border-bottom: 0;
   color: var(--ink);
-  border-radius: 10px 10px 0 0;
-  padding: 5px 14px 8px;
-  min-height: 30px;
-  margin-left: -1px;
-  margin-bottom: 2px;
+  border-radius: 12px;
+  padding: 7px 14px;
+  min-height: 0;
   box-shadow: none;
   position: relative;
   z-index: 1;
-}
-
-.tab:first-child {
-  margin-left: 0;
 }
 
 .tab:hover {
@@ -1257,13 +1184,7 @@ mark.used {
   background: var(--accent-2);
   color: #fff;
   border-color: var(--accent-2);
-  padding-bottom: 9px;
-  margin-bottom: 0;
-  z-index: 2;
-}
-
-.tab.active::after {
-  content: none;
+  z-index: 1;
 }
 
 .tab-content {
