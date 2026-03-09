@@ -89,62 +89,91 @@
             <h2>Annotation Builder</h2>
           </div>
 
-          <div class="tab-bar">
-            <button class="tab active" data-tab="concept">Artifact</button>
-            <button class="tab" data-tab="argument">Argument</button>
-            <button class="tab" data-tab="descriptor">Descriptor</button>
+          <div class="builder-main-tabs">
+            <button class="builder-main-tab active" data-builder-panel="node">Node</button>
+            <button class="builder-main-tab" data-builder-panel="relation">Relations</button>
           </div>
 
-          <div id="conceptTab" class="tab-content active">
-            <div class="stack">
-              <label>Label <span class="required">*</span><input id="conceptLabel" type="text" placeholder="e.g., Latent Dirichlet Allocation" /></label>
-              <label>Aliases <input id="conceptAliases" type="text" placeholder="Comma-separated" /></label>
-              <label>Category <span class="required">*</span>
-                <select id="artifactType"></select>
-              </label>
+          <div id="builderNodePanel" class="builder-panel active">
+            <div class="tab-bar">
+              <button class="tab active" data-tab="concept">Artifact</button>
+              <button class="tab" data-tab="argument">Argument</button>
+              <button class="tab" data-tab="descriptor">Descriptor</button>
             </div>
-            <div class="stack source-refs">
-              <div class="subhead">Source refs</div>
-              <div id="highlightPicker"></div>
+
+            <div id="conceptTab" class="tab-content active">
+              <div class="stack">
+                <label>Label <span class="required">*</span><input id="conceptLabel" type="text" placeholder="e.g., Latent Dirichlet Allocation" /></label>
+                <label>Aliases <input id="conceptAliases" type="text" placeholder="Comma-separated" /></label>
+                <label>Category <span class="required">*</span>
+                  <select id="artifactType"></select>
+                </label>
+              </div>
+              <div class="stack source-refs">
+                <div class="subhead">Source refs</div>
+                <div id="highlightPicker"></div>
+              </div>
+              <button id="addConceptBtn">Add Artifact</button>
             </div>
-            <button id="addConceptBtn">Add Artifact</button>
+
+            <div id="argumentTab" class="tab-content">
+              <div class="stack">
+                <label>Canonical Text <span class="required">*</span>
+                  <textarea id="argumentText" rows="4" placeholder="Minimal assertion..."></textarea>
+                </label>
+                <label>Type <span class="required">*</span>
+                  <select id="argumentType"></select>
+                </label>
+                <label>Artifact refs
+                  <div id="argumentConceptRefs" class="tag-list"></div>
+                </label>
+              </div>
+              <div class="stack source-refs">
+                <div class="subhead">Source refs</div>
+                <div id="highlightPickerArgument"></div>
+              </div>
+              <button id="addArgumentBtn">Add Argument</button>
+            </div>
+
+            <div id="descriptorTab" class="tab-content">
+              <div class="stack">
+                <label>Type <span class="required">*</span>
+                  <select id="descriptorType"></select>
+                </label>
+                <label>Artifact refs
+                  <div id="descriptorConceptRefs" class="tag-list"></div>
+                </label>
+              </div>
+              <div class="stack source-refs">
+                <div class="subhead">Source refs</div>
+                <div id="highlightPickerDescriptor"></div>
+              </div>
+              <button id="addDescriptorBtn">Add Descriptor</button>
+            </div>
           </div>
 
-          <div id="argumentTab" class="tab-content">
-            <div class="stack">
-              <label>Canonical Text <span class="required">*</span>
-                <textarea id="argumentText" rows="4" placeholder="Minimal assertion..."></textarea>
-              </label>
-              <label>Type <span class="required">*</span>
-                <select id="argumentType"></select>
-              </label>
-              <label>Artifact refs
-                <div id="argumentConceptRefs" class="tag-list"></div>
-              </label>
-              <div id="argumentArtifactRelations" class="relation-editor hidden"></div>
+          <div id="builderRelationPanel" class="builder-panel">
+            <div class="relation-family-tabs">
+              <button class="relation-family-tab active" data-relation-family="artifact-artifact">Artifact ↔ Artifact</button>
+              <button class="relation-family-tab" data-relation-family="argument-artifact">Argument ↔ Artifact</button>
+              <button class="relation-family-tab" data-relation-family="argument-argument">Argument ↔ Argument</button>
             </div>
-            <div class="stack source-refs">
-              <div class="subhead">Source refs</div>
-              <div id="highlightPickerArgument"></div>
-            </div>
-            <button id="addArgumentBtn">Add Argument</button>
-          </div>
 
-          <div id="descriptorTab" class="tab-content">
-            <div class="stack">
-              <label>Type <span class="required">*</span>
-                <select id="descriptorType"></select>
-              </label>
-              <label>Artifact refs
-                <div id="descriptorConceptRefs" class="tag-list"></div>
-              </label>
-              <div id="descriptorArtifactRelations" class="relation-editor hidden"></div>
+            <div class="relation-editor">
+              <div class="stack">
+                <label>Head <span class="required">*</span>
+                  <select id="relationHeadSelect"></select>
+                </label>
+                <label>Relation type <span class="required">*</span>
+                  <select id="relationTypeSelect"></select>
+                </label>
+                <label>Tail <span class="required">*</span>
+                  <select id="relationTailSelect"></select>
+                </label>
+              </div>
+              <button id="addRelationBtn">Add Relation</button>
+              <div id="relationEditorList" class="relation-list"></div>
             </div>
-            <div class="stack source-refs">
-              <div class="subhead">Source refs</div>
-              <div id="highlightPickerDescriptor"></div>
-            </div>
-            <button id="addDescriptorBtn">Add Descriptor</button>
           </div>
         </section>
 

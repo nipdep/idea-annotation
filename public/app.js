@@ -32,14 +32,55 @@ const descriptorTypes = [
   "Comparison",
 ];
 
-const artifactRelationTypes = [
-  "sudo:extends(Model, Model)",
-  "sudo:basedOn(Artifact, Artifact)",
-  "sudo:usesComponent(Artifact, Component)",
-  "sudo:evaluatedOn(Model, Dataset)",
-  "sudo:implements(Model, Algorithm)",
-  "sudo:comparedTo(Model, Model)",
-  "sudo:outperforms(Model, Model)",
+const relationFamilies = [
+  {
+    key: "artifact-artifact",
+    label: "Artifact ↔ Artifact",
+    headKind: "artifact",
+    tailKind: "artifact",
+    types: [
+      "extends(Model, Model)",
+      "basedOn(Artifact, Artifact)",
+      "usesComponent(Artifact, Component)",
+      "evaluatedOn(Model, Dataset)",
+      "implements(Model, Algorithm)",
+      "comparedTo(Model, Model)",
+      "outperforms(Model, Model)",
+    ],
+  },
+  {
+    key: "argument-artifact",
+    label: "Argument ↔ Artifact",
+    headKind: "argument",
+    tailKind: "artifact",
+    types: [
+      "introduces(approach, artifact)",
+      "uses(approach, artifact)",
+      "evaluates(evidence, artifact)",
+      "compares(argument, artifact)",
+      "targets(approach, task)",
+      "measures(evidence, metric)",
+      "reportson(evidence, dataset)",
+      "about(argument, artifact)",
+    ],
+  },
+  {
+    key: "argument-argument",
+    label: "Argument ↔ Argument",
+    headKind: "argument",
+    tailKind: "argument",
+    types: [
+      "resolves(Idea, Issue)",
+      "realizes(Idea, Approach)",
+      "generates(Approach, Evidence)",
+      "supports(Evidence, Claim)",
+      "warrants(Claim, Warrant)",
+      "backs(Claim, Backing)",
+      "qualifies(Claim, Qualifier)",
+      "rebuts(Claim, Rebuttal)",
+      "elaborates(A, B)",
+    ],
+  },
 ];
 
 const state = {
@@ -49,7 +90,7 @@ const state = {
   metadataChecks: {},
   doc: null,
   teiXml: "",
-  annotations: { concepts: [], arguments: [], descriptors: [], created_at: null },
+  annotations: { concepts: [], arguments: [], descriptors: [], relations: [], created_at: null },
   localPdfUrl: "",
   docMode: "pdf",
   parsedReady: false,
@@ -75,14 +116,9 @@ const state = {
     argument: new Set(),
     descriptor: new Set(),
   },
-  editorRelations: {
-    argument: [],
-    descriptor: [],
-  },
-  relationDrafts: {
-    argument: { source_artifact_id: "", target_artifact_id: "", relation_type: artifactRelationTypes[0] },
-    descriptor: { source_artifact_id: "", target_artifact_id: "", relation_type: artifactRelationTypes[0] },
-  },
+  builderMode: "node",
+  relationMode: relationFamilies[0].key,
+  relationDraft: { head_id: "", relation_type: relationFamilies[0].types[0], tail_id: "" },
   conceptType: "",
   library: {
     items: [],
@@ -840,207 +876,256 @@ function normalizeAliases(value) {
 
 function normalizeAnnotations(annotation) {
   const base = annotation || {};
+  const argumentList = Array.isArray(base.arguments) ? base.arguments : [];
+  const descriptorList = Array.isArray(base.descriptors) ? base.descriptors : [];
+  const explicitRelations = Array.isArray(base.relations) ? base.relations : [];
+  const legacyRelations = [];
+
+  const pushLegacyRelation = (ownerKind, ownerId, relation) => {
+    const headId = String(relation?.source_artifact_id || "").trim();
+    const tailId = String(relation?.target_artifact_id || "").trim();
+    const relationType = formatRelationLabel(relation?.relation_type || "");
+    if (!headId || !tailId || !relationType) return;
+    legacyRelations.push({
+      relation_family: "artifact-artifact",
+      relation_type: relationType,
+      head_id: headId,
+      tail_id: tailId,
+      head_kind: "artifact",
+      tail_kind: "artifact",
+      source_owner_kind: ownerKind,
+      source_owner_id: ownerId,
+    });
+  };
+
+  argumentList.forEach((argument) => {
+    (Array.isArray(argument?.artifact_relations) ? argument.artifact_relations : []).forEach((relation) =>
+      pushLegacyRelation("argument", argument?.argument_id || "", relation)
+    );
+  });
+
+  descriptorList.forEach((descriptor) => {
+    (Array.isArray(descriptor?.artifact_relations) ? descriptor.artifact_relations : []).forEach((relation) =>
+      pushLegacyRelation("descriptor", descriptor?.descriptor_id || "", relation)
+    );
+  });
+
+  const relationList = explicitRelations.length ? explicitRelations : legacyRelations;
+  const normalizedRelations = relationList
+    .map((relation, index) => {
+      const familyKey = String(relation?.relation_family || "").trim() || "artifact-artifact";
+      const family = relationFamilies.find((item) => item.key === familyKey) || relationFamilies[0];
+      const headId = String(relation?.head_id || "").trim();
+      const tailId = String(relation?.tail_id || "").trim();
+      const relationType = formatRelationLabel(relation?.relation_type || "");
+      if (!headId || !tailId || !relationType) return null;
+      const matchedType =
+        family.types.find((type) => type.toLowerCase() === relationType.toLowerCase()) || relationType;
+      return {
+        relation_id: String(relation?.relation_id || `R${String(index + 1).padStart(2, "0")}`),
+        relation_family: family.key,
+        relation_type: matchedType,
+        head_id: headId,
+        tail_id: tailId,
+        head_kind: family.headKind,
+        tail_kind: family.tailKind,
+      };
+    })
+    .filter(Boolean);
+
   return {
     concepts: Array.isArray(base.concepts) ? base.concepts : [],
-    arguments: Array.isArray(base.arguments) ? base.arguments : [],
-    descriptors: Array.isArray(base.descriptors) ? base.descriptors : [],
+    arguments: argumentList.map((argument) => {
+      if (!argument || typeof argument !== "object") return argument;
+      const copy = { ...argument };
+      delete copy.artifact_relations;
+      return copy;
+    }),
+    descriptors: descriptorList.map((descriptor) => {
+      if (!descriptor || typeof descriptor !== "object") return descriptor;
+      const copy = { ...descriptor };
+      delete copy.artifact_relations;
+      return copy;
+    }),
+    relations: normalizedRelations,
     created_at: base.created_at || null,
     updated_at: base.updated_at || null,
   };
 }
 
-function relationContainerId(kind) {
-  return kind === "argument" ? "argumentConceptRefs" : "descriptorConceptRefs";
+function getRelationFamily(familyKey = "") {
+  return (
+    relationFamilies.find((family) => family.key === String(familyKey || "").trim()) ||
+    relationFamilies[0]
+  );
 }
 
-function relationEditorId(kind) {
-  return kind === "argument" ? "argumentArtifactRelations" : "descriptorArtifactRelations";
+function getRelationNodeOptions(kind) {
+  if (kind === "artifact") {
+    return (state.annotations.concepts || []).map((concept) => ({
+      id: concept.concept_id,
+      label: `${concept.concept_id} ${concept.label || ""}`.trim(),
+    }));
+  }
+  if (kind === "argument") {
+    return (state.annotations.arguments || []).map((argument) => ({
+      id: argument.argument_id,
+      label: `${argument.argument_id} ${formatTypeLabel(argument.arg_type || "")}`.trim(),
+    }));
+  }
+  return [];
 }
 
-function getSelectedArtifactRefs(kind) {
-  const container = el(relationContainerId(kind));
-  if (!container) return [];
-  return Array.from(container.querySelectorAll(".ref-pill.selected")).map((pill) => pill.dataset.conceptId);
-}
+function ensureRelationDraftForFamily(family) {
+  const headOptions = getRelationNodeOptions(family.headKind);
+  const tailOptions = getRelationNodeOptions(family.tailKind);
 
-function resetRelationDraft(kind, selectedRefs = []) {
-  const [first = "", second = ""] = selectedRefs;
-  state.relationDrafts[kind] = {
-    source_artifact_id: first || "",
-    target_artifact_id: second || (selectedRefs.find((id) => id !== first) || ""),
-    relation_type: artifactRelationTypes[0],
+  const draft = state.relationDraft || {};
+  const typeMatched =
+    family.types.find((type) => type.toLowerCase() === String(draft.relation_type || "").toLowerCase()) ||
+    family.types[0] ||
+    "";
+
+  let headId = String(draft.head_id || "").trim();
+  let tailId = String(draft.tail_id || "").trim();
+  if (!headOptions.some((option) => option.id === headId)) {
+    headId = headOptions[0]?.id || "";
+  }
+  if (!tailOptions.some((option) => option.id === tailId) || (family.headKind === family.tailKind && tailId === headId)) {
+    tailId = tailOptions.find((option) => option.id !== headId)?.id || tailOptions[0]?.id || "";
+  }
+
+  state.relationDraft = {
+    head_id: headId,
+    relation_type: typeMatched,
+    tail_id: tailId,
   };
 }
 
-function normalizeArtifactRelations(relations, allowedRefs) {
-  const allowed = new Set(allowedRefs || []);
-  return (Array.isArray(relations) ? relations : []).filter((relation) => {
-    const source = String(relation?.source_artifact_id || "").trim();
-    const target = String(relation?.target_artifact_id || "").trim();
-    const type = String(relation?.relation_type || "").trim();
-    return (
-      source &&
-      target &&
-      source !== target &&
-      allowed.has(source) &&
-      allowed.has(target) &&
-      artifactRelationTypes.includes(type)
-    );
+function populateRelationSelect(selectEl, options, selectedValue) {
+  if (!selectEl) return;
+  selectEl.innerHTML = "";
+  if (!options.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No options available";
+    selectEl.appendChild(option);
+    selectEl.disabled = true;
+    return;
+  }
+  selectEl.disabled = false;
+  options.forEach((optionItem) => {
+    const option = document.createElement("option");
+    option.value = optionItem.value;
+    option.textContent = optionItem.label;
+    if (optionItem.disabled) option.disabled = true;
+    selectEl.appendChild(option);
   });
+  selectEl.value = selectedValue || options[0].value;
 }
 
-function renderArtifactRelationEditor(kind) {
-  const container = el(relationEditorId(kind));
-  if (!container) return;
+function renderRelationEditorList() {
+  const list = el("relationEditorList");
+  if (!list) return;
+  list.innerHTML = "";
 
-  const selectedRefs = getSelectedArtifactRefs(kind);
-  state.editorRelations[kind] = normalizeArtifactRelations(state.editorRelations[kind], selectedRefs);
+  const family = getRelationFamily(state.relationMode);
+  const rows = (state.annotations.relations || []).filter(
+    (relation) => relation.relation_family === family.key
+  );
 
-  if (selectedRefs.length < 2) {
-    container.innerHTML = "";
-    container.classList.add("hidden");
-    resetRelationDraft(kind, selectedRefs);
+  if (!rows.length) {
+    list.innerHTML = '<div class="muted">No relations in this category.</div>';
     return;
   }
 
-  const draft = state.relationDrafts[kind] || {};
-  if (!selectedRefs.includes(draft.source_artifact_id)) {
-    draft.source_artifact_id = selectedRefs[0] || "";
-  }
-  if (
-    !selectedRefs.includes(draft.target_artifact_id) ||
-    draft.target_artifact_id === draft.source_artifact_id
-  ) {
-    draft.target_artifact_id = selectedRefs.find((id) => id !== draft.source_artifact_id) || "";
-  }
-  if (!artifactRelationTypes.includes(draft.relation_type)) {
-    draft.relation_type = artifactRelationTypes[0];
-  }
-  state.relationDrafts[kind] = draft;
+  rows.forEach((relation) => {
+    const item = document.createElement("div");
+    item.className = "relation-item";
 
-  container.classList.remove("hidden");
-  container.innerHTML = "";
+    const headLabel =
+      getRelationNodeOptions(family.headKind).find((option) => option.id === relation.head_id)?.label ||
+      relation.head_id;
+    const tailLabel =
+      getRelationNodeOptions(family.tailKind).find((option) => option.id === relation.tail_id)?.label ||
+      relation.tail_id;
 
-  const title = document.createElement("div");
-  title.className = "subhead";
-  title.textContent = "Artifact Relations";
-  container.appendChild(title);
+    const text = document.createElement("div");
+    text.className = "relation-item-text";
+    text.textContent = `${headLabel} ${formatRelationLabel(relation.relation_type)} ${tailLabel}`;
 
-  const help = document.createElement("div");
-  help.className = "muted";
-  help.textContent = "Add artifact-to-artifact relations for this annotation.";
-  container.appendChild(help);
-
-  const controls = document.createElement("div");
-  controls.className = "relation-controls";
-
-  const sourceSelect = document.createElement("select");
-  selectedRefs.forEach((refId) => {
-    const option = document.createElement("option");
-    option.value = refId;
-    option.textContent = refId;
-    sourceSelect.appendChild(option);
-  });
-  sourceSelect.value = draft.source_artifact_id;
-  sourceSelect.addEventListener("change", (event) => {
-    state.relationDrafts[kind].source_artifact_id = event.target.value;
-    if (state.relationDrafts[kind].target_artifact_id === event.target.value) {
-      state.relationDrafts[kind].target_artifact_id =
-        selectedRefs.find((id) => id !== event.target.value) || "";
-      renderArtifactRelationEditor(kind);
-    }
-  });
-
-  const relationSelect = document.createElement("select");
-  artifactRelationTypes.forEach((relationType) => {
-    const option = document.createElement("option");
-    option.value = relationType;
-    option.textContent = formatRelationLabel(relationType);
-    relationSelect.appendChild(option);
-  });
-  relationSelect.value = draft.relation_type;
-  relationSelect.addEventListener("change", (event) => {
-    state.relationDrafts[kind].relation_type = event.target.value;
-  });
-
-  const targetSelect = document.createElement("select");
-  selectedRefs.forEach((refId) => {
-    const option = document.createElement("option");
-    option.value = refId;
-    option.textContent = refId;
-    option.disabled = refId === draft.source_artifact_id;
-    targetSelect.appendChild(option);
-  });
-  targetSelect.value = draft.target_artifact_id;
-  targetSelect.addEventListener("change", (event) => {
-    state.relationDrafts[kind].target_artifact_id = event.target.value;
-  });
-
-  const addButton = document.createElement("button");
-  addButton.type = "button";
-  addButton.className = "ghost";
-  addButton.textContent = "Add Relation";
-  addButton.addEventListener("click", () => {
-    const next = {
-      source_artifact_id: String(state.relationDrafts[kind].source_artifact_id || "").trim(),
-      target_artifact_id: String(state.relationDrafts[kind].target_artifact_id || "").trim(),
-      relation_type: String(state.relationDrafts[kind].relation_type || "").trim(),
-    };
-    if (!next.source_artifact_id || !next.target_artifact_id || next.source_artifact_id === next.target_artifact_id) {
-      showToast("Choose two different artifacts for the relation.", "error");
-      return;
-    }
-    const exists = state.editorRelations[kind].some(
-      (relation) =>
-        relation.source_artifact_id === next.source_artifact_id &&
-        relation.target_artifact_id === next.target_artifact_id &&
-        relation.relation_type === next.relation_type
-    );
-    if (!exists) {
-      state.editorRelations[kind].push(next);
-    }
-    renderArtifactRelationEditor(kind);
-  });
-
-  controls.appendChild(sourceSelect);
-  controls.appendChild(relationSelect);
-  controls.appendChild(targetSelect);
-  controls.appendChild(addButton);
-  container.appendChild(controls);
-
-  const list = document.createElement("div");
-  list.className = "relation-list";
-  if (!state.editorRelations[kind].length) {
-    const empty = document.createElement("div");
-    empty.className = "muted";
-    empty.textContent = "No artifact relations added.";
-    list.appendChild(empty);
-  } else {
-    state.editorRelations[kind].forEach((relation, index) => {
-      const item = document.createElement("div");
-      item.className = "relation-item";
-
-      const text = document.createElement("div");
-      text.className = "relation-item-text";
-      text.textContent = `${relation.source_artifact_id} ${formatRelationLabel(
-        relation.relation_type
-      )} ${relation.target_artifact_id}`;
-
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "ghost";
-      remove.textContent = "Remove";
-      remove.addEventListener("click", () => {
-        state.editorRelations[kind].splice(index, 1);
-        renderArtifactRelationEditor(kind);
-      });
-
-      item.appendChild(text);
-      item.appendChild(remove);
-      list.appendChild(item);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "ghost";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", () => {
+      state.annotations.relations = (state.annotations.relations || []).filter(
+        (row) => row.relation_id !== relation.relation_id
+      );
+      renderConceptList();
+      renderArgumentList();
+      renderDescriptorList();
     });
+
+    item.appendChild(text);
+    item.appendChild(remove);
+    list.appendChild(item);
+  });
+}
+
+function renderRelationEditor() {
+  const family = getRelationFamily(state.relationMode);
+  ensureRelationDraftForFamily(family);
+
+  const headSelect = el("relationHeadSelect");
+  const typeSelect = el("relationTypeSelect");
+  const tailSelect = el("relationTailSelect");
+  if (!headSelect || !typeSelect || !tailSelect) return;
+
+  const headOptions = getRelationNodeOptions(family.headKind).map((option) => ({
+    value: option.id,
+    label: option.label,
+  }));
+  const typeOptions = family.types.map((type) => ({ value: type, label: type }));
+  let tailOptions = getRelationNodeOptions(family.tailKind).map((option) => ({
+    value: option.id,
+    label: option.label,
+    disabled: family.headKind === family.tailKind && option.id === state.relationDraft.head_id,
+  }));
+
+  if (family.headKind === family.tailKind && !tailOptions.some((option) => !option.disabled)) {
+    tailOptions = [{ value: "", label: "Need at least two nodes", disabled: true }];
   }
-  container.appendChild(list);
+
+  populateRelationSelect(headSelect, headOptions, state.relationDraft.head_id);
+  populateRelationSelect(typeSelect, typeOptions, state.relationDraft.relation_type);
+  populateRelationSelect(tailSelect, tailOptions, state.relationDraft.tail_id);
+
+  const addBtn = el("addRelationBtn");
+  if (addBtn) {
+    const selectedTailDisabled = !!tailSelect.selectedOptions?.[0]?.disabled;
+    addBtn.disabled =
+      headSelect.disabled ||
+      typeSelect.disabled ||
+      tailSelect.disabled ||
+      selectedTailDisabled ||
+      !headSelect.value ||
+      !typeSelect.value ||
+      !tailSelect.value;
+  }
+
+  headSelect.onchange = () => {
+    state.relationDraft.head_id = headSelect.value;
+    renderRelationEditor();
+  };
+  typeSelect.onchange = () => {
+    state.relationDraft.relation_type = typeSelect.value;
+  };
+  tailSelect.onchange = () => {
+    state.relationDraft.tail_id = tailSelect.value;
+  };
+
+  renderRelationEditorList();
 }
 
 function normalizeAnchor(anchor) {
@@ -1243,8 +1328,6 @@ function resetConceptEditor() {
 
 function resetArgumentEditor() {
   state.editing.argumentId = null;
-  state.editorRelations.argument = [];
-  resetRelationDraft("argument");
   clearVirtualHighlights("argument");
   el("argumentText").value = "";
   el("argumentType").value = argumentTypes[0];
@@ -1255,15 +1338,12 @@ function resetArgumentEditor() {
     .querySelectorAll(".ref-pill")
     .forEach((pill) => pill.classList.remove("selected"));
   renderHighlightPickers();
-  renderArtifactRelationEditor("argument");
   setArgumentButtonMode();
   renderArgumentList();
 }
 
 function resetDescriptorEditor() {
   state.editing.descriptorId = null;
-  state.editorRelations.descriptor = [];
-  resetRelationDraft("descriptor");
   clearVirtualHighlights("descriptor");
   el("descriptorType").value = descriptorTypes[0];
   state.highlightSelection.descriptor.clear();
@@ -1271,7 +1351,6 @@ function resetDescriptorEditor() {
     .querySelectorAll(".ref-pill")
     .forEach((pill) => pill.classList.remove("selected"));
   renderHighlightPickers();
-  renderArtifactRelationEditor("descriptor");
   setDescriptorButtonMode();
   renderDescriptorList();
 }
@@ -1284,6 +1363,7 @@ function startConceptEdit(conceptId) {
     return;
   }
   state.editing.conceptId = conceptId;
+  setBuilderPanel("node");
   activateAnnotationTab("concept");
   el("conceptLabel").value = concept.label || "";
   el("conceptAliases").value = (concept.aliases || []).join(", ");
@@ -1305,6 +1385,7 @@ function startArgumentEdit(argumentId) {
     return;
   }
   state.editing.argumentId = argumentId;
+  setBuilderPanel("node");
   activateAnnotationTab("argument");
   el("argumentText").value = argument.text || "";
   el("argumentType").value = resolveOptionValue(argumentTypes, argument.arg_type) || argumentTypes[0];
@@ -1319,11 +1400,6 @@ function startArgumentEdit(argumentId) {
       pill.classList.toggle("selected", isSelected);
       pill.dataset.selected = isSelected ? "true" : "false";
     });
-  state.editorRelations.argument = Array.isArray(argument.artifact_relations)
-    ? argument.artifact_relations.map((relation) => ({ ...relation }))
-    : [];
-  resetRelationDraft("argument", argument.concept_refs || []);
-  renderArtifactRelationEditor("argument");
   renderHighlightPickers();
   setArgumentButtonMode();
   renderArgumentList();
@@ -1337,6 +1413,7 @@ function startDescriptorEdit(descriptorId) {
     return;
   }
   state.editing.descriptorId = descriptorId;
+  setBuilderPanel("node");
   activateAnnotationTab("descriptor");
   el("descriptorType").value =
     resolveOptionValue(descriptorTypes, descriptor.descriptor_type) || descriptorTypes[0];
@@ -1350,11 +1427,6 @@ function startDescriptorEdit(descriptorId) {
       pill.classList.toggle("selected", isSelected);
       pill.dataset.selected = isSelected ? "true" : "false";
     });
-  state.editorRelations.descriptor = Array.isArray(descriptor.artifact_relations)
-    ? descriptor.artifact_relations.map((relation) => ({ ...relation }))
-    : [];
-  resetRelationDraft("descriptor", descriptor.concept_refs || []);
-  renderArtifactRelationEditor("descriptor");
   renderHighlightPickers();
   setDescriptorButtonMode();
   renderDescriptorList();
@@ -2307,19 +2379,30 @@ function renderLibraryDetail() {
           info.appendChild(refsWrap);
         }
 
-        const artifactRelations = Array.isArray(arg.artifact_relations) ? arg.artifact_relations : [];
-        if (artifactRelations.length) {
+        const linkedRelations = (selected.relations || []).filter((relation) => {
+          const family = getRelationFamily(relation.relation_family);
+          const headKind = relation.head_kind || family.headKind;
+          const tailKind = relation.tail_kind || family.tailKind;
+          const isHead = headKind === "argument" && relation.head_id === arg.argument_id;
+          const isTail = tailKind === "argument" && relation.tail_id === arg.argument_id;
+          return isHead || isTail;
+        });
+        if (linkedRelations.length) {
           const relLabel = document.createElement("div");
-          relLabel.innerHTML = "<strong>Artifact relations</strong>";
+          relLabel.innerHTML = "<strong>Relations</strong>";
           info.appendChild(relLabel);
 
           const relWrap = document.createElement("div");
           relWrap.className = "meta";
-          relWrap.textContent = artifactRelations
-            .map(
-              (relation) =>
-                `${relation.source_artifact_id} ${formatRelationLabel(relation.relation_type)} ${relation.target_artifact_id}`
-            )
+          relWrap.textContent = linkedRelations
+            .map((relation) => {
+              const family = getRelationFamily(relation.relation_family);
+              const headKind = relation.head_kind || family.headKind;
+              const tailKind = relation.tail_kind || family.tailKind;
+              const head = findNodeLabelFromData(headKind, relation.head_id, selected);
+              const tail = findNodeLabelFromData(tailKind, relation.tail_id, selected);
+              return `${head} ${relation.relation_type} ${tail}`;
+            })
             .join(" | ");
           info.appendChild(relWrap);
         }
@@ -2449,24 +2532,6 @@ function renderLibraryDetail() {
           info.appendChild(refsWrap);
         }
 
-        const artifactRelations = Array.isArray(descriptor.artifact_relations)
-          ? descriptor.artifact_relations
-          : [];
-        if (artifactRelations.length) {
-          const relLabel = document.createElement("div");
-          relLabel.innerHTML = "<strong>Artifact relations</strong>";
-          info.appendChild(relLabel);
-
-          const relWrap = document.createElement("div");
-          relWrap.className = "meta";
-          relWrap.textContent = artifactRelations
-            .map(
-              (relation) =>
-                `${relation.source_artifact_id} ${formatRelationLabel(relation.relation_type)} ${relation.target_artifact_id}`
-            )
-            .join(" | ");
-          info.appendChild(relWrap);
-        }
       }
     }
     if (!info.innerHTML) {
@@ -2560,6 +2625,34 @@ function renderLibraryDetail() {
   }
   descriptorBlock.appendChild(descriptorList);
   container.appendChild(descriptorBlock);
+
+  const relationBlock = document.createElement("div");
+  relationBlock.className = "list-block";
+  relationBlock.innerHTML = `<div class="subhead">Relations</div>`;
+  const relationList = document.createElement("div");
+  relationList.className = "list";
+  (selected.relations || []).forEach((relation) => {
+    const item = document.createElement("div");
+    item.className = "list-item";
+    const family = getRelationFamily(relation.relation_family);
+    const headKind = relation.head_kind || family.headKind;
+    const tailKind = relation.tail_kind || family.tailKind;
+    const head = findNodeLabelFromData(headKind, relation.head_id, selected);
+    const tail = findNodeLabelFromData(tailKind, relation.tail_id, selected);
+    item.innerHTML = `
+      <div>
+        <div><strong>${family.label}</strong></div>
+        <div class="meta">${head} → ${tail}</div>
+        <div class="meta">${relation.relation_type || "-"}</div>
+      </div>
+    `;
+    relationList.appendChild(item);
+  });
+  if (!selected.relations?.length) {
+    relationList.innerHTML = '<div class="muted">No relations recorded.</div>';
+  }
+  relationBlock.appendChild(relationList);
+  container.appendChild(relationBlock);
 }
 
 function selectLibraryItem(paperId) {
@@ -2578,7 +2671,17 @@ async function fetchLibrary() {
     return;
   }
   const data = await res.json();
-  state.library.items = data.items || [];
+  state.library.items = (data.items || []).map((item) => {
+    const normalized = normalizeAnnotations(item);
+    return {
+      ...item,
+      concepts: normalized.concepts,
+      arguments: normalized.arguments,
+      descriptors: normalized.descriptors,
+      relations: normalized.relations,
+      updated_at: normalized.updated_at || item.updated_at || "",
+    };
+  });
   state.library.loaded = true;
   applyLibraryFilter(el("librarySearch")?.value || "");
 }
@@ -3120,42 +3223,72 @@ function removeHighlightsForSourceRefs(target, sourceRefs) {
   consumedIds.forEach((id) => removeHighlight(id));
 }
 
-function findArtifactLabel(conceptId) {
-  const concept = (state.annotations.concepts || []).find((item) => item.concept_id === conceptId);
+function findArtifactLabelFromData(data, conceptId) {
+  const concept = (data?.concepts || []).find((item) => item.concept_id === conceptId);
   if (!concept) return conceptId;
   return `${conceptId} ${concept.label || ""}`.trim();
 }
 
+function findArtifactLabel(conceptId) {
+  return findArtifactLabelFromData(state.annotations, conceptId);
+}
+
+function findArgumentLabelFromData(data, argumentId) {
+  const argument = (data?.arguments || []).find((item) => item.argument_id === argumentId);
+  if (!argument) return argumentId;
+  return `${argumentId} ${formatTypeLabel(argument.arg_type || "")}`.trim();
+}
+
+function findArgumentLabel(argumentId) {
+  return findArgumentLabelFromData(state.annotations, argumentId);
+}
+
+function findNodeLabel(kind, id) {
+  if (kind === "artifact") return findArtifactLabel(id);
+  if (kind === "argument") return findArgumentLabel(id);
+  return id;
+}
+
+function findNodeLabelFromData(kind, id, data) {
+  if (kind === "artifact") return findArtifactLabelFromData(data, id);
+  if (kind === "argument") return findArgumentLabelFromData(data, id);
+  return id;
+}
+
+function removeRelationsByNode(kind, nodeId) {
+  const before = (state.annotations.relations || []).length;
+  state.annotations.relations = (state.annotations.relations || []).filter((relation) => {
+    const family = getRelationFamily(relation.relation_family);
+    const headKind = relation.head_kind || family.headKind;
+    const tailKind = relation.tail_kind || family.tailKind;
+    const headMatch = headKind === kind && relation.head_id === nodeId;
+    const tailMatch = tailKind === kind && relation.tail_id === nodeId;
+    return !headMatch && !tailMatch;
+  });
+  return before - state.annotations.relations.length;
+}
+
+function countRelationsForNode(kind, nodeId) {
+  return (state.annotations.relations || []).filter((relation) => {
+    const family = getRelationFamily(relation.relation_family);
+    const headKind = relation.head_kind || family.headKind;
+    const tailKind = relation.tail_kind || family.tailKind;
+    const headMatch = headKind === kind && relation.head_id === nodeId;
+    const tailMatch = tailKind === kind && relation.tail_id === nodeId;
+    return headMatch || tailMatch;
+  }).length;
+}
+
 function collectAnnotatedRelations() {
-  const rows = [];
-
-  (state.annotations.arguments || []).forEach((argument) => {
-    const relations = Array.isArray(argument.artifact_relations) ? argument.artifact_relations : [];
-    relations.forEach((relation, index) => {
-      rows.push({
-        ownerType: "Argument",
-        ownerId: argument.argument_id,
-        ownerTypeLabel: argument.arg_type ? formatTypeLabel(argument.arg_type) : "",
-        relation,
-        relationIndex: index,
-      });
-    });
+  return (state.annotations.relations || []).map((relation) => {
+    const family = getRelationFamily(relation.relation_family);
+    return {
+      relation,
+      family,
+      headLabel: findNodeLabel(family.headKind, relation.head_id),
+      tailLabel: findNodeLabel(family.tailKind, relation.tail_id),
+    };
   });
-
-  (state.annotations.descriptors || []).forEach((descriptor) => {
-    const relations = Array.isArray(descriptor.artifact_relations) ? descriptor.artifact_relations : [];
-    relations.forEach((relation, index) => {
-      rows.push({
-        ownerType: "Descriptor",
-        ownerId: descriptor.descriptor_id,
-        ownerTypeLabel: descriptor.descriptor_type ? formatTypeLabel(descriptor.descriptor_type) : "",
-        relation,
-        relationIndex: index,
-      });
-    });
-  });
-
-  return rows;
 }
 
 function renderRelationList() {
@@ -3170,31 +3303,41 @@ function renderRelationList() {
   }
 
   rows.forEach((row) => {
-    const sourceId = row.relation?.source_artifact_id || "";
-    const targetId = row.relation?.target_artifact_id || "";
-    const relationType = String(row.relation?.relation_type || "").replace(/^sudo:/, "");
-    const sourceLabel = findArtifactLabel(sourceId);
-    const targetLabel = findArtifactLabel(targetId);
-
     const item = document.createElement("div");
     item.className = "list-item relation-item";
 
     const info = document.createElement("div");
     info.innerHTML = `
-      <div><strong>${row.ownerType} ${row.ownerId}</strong>${row.ownerTypeLabel ? ` • ${row.ownerTypeLabel}` : ""}</div>
-      <div class="meta">${sourceLabel} → ${targetLabel}</div>
-      <div class="meta">${relationType || "Relation"}</div>
+      <div><strong>${row.family.label}</strong></div>
+      <div class="meta">${row.headLabel} → ${row.tailLabel}</div>
+      <div class="meta">${formatRelationLabel(row.relation.relation_type)}</div>
     `;
 
     info.addEventListener("click", () => {
-      if (row.ownerType === "Argument") {
-        startArgumentEdit(row.ownerId);
-      } else {
-        startDescriptorEdit(row.ownerId);
-      }
+      setBuilderPanel("relation");
+      setRelationFamily(row.relation.relation_family);
+      state.relationDraft = {
+        head_id: row.relation.head_id,
+        relation_type: row.relation.relation_type,
+        tail_id: row.relation.tail_id,
+      };
+      renderRelationEditor();
+    });
+
+    const remove = document.createElement("button");
+    remove.className = "ghost";
+    remove.textContent = "Delete";
+    remove.addEventListener("click", () => {
+      state.annotations.relations = (state.annotations.relations || []).filter(
+        (relation) => relation.relation_id !== row.relation.relation_id
+      );
+      renderConceptList();
+      renderArgumentList();
+      renderDescriptorList();
     });
 
     item.appendChild(info);
+    item.appendChild(remove);
     list.appendChild(item);
   });
 }
@@ -3204,6 +3347,7 @@ function renderConceptList() {
   list.innerHTML = "";
   if (state.annotations.concepts.length === 0) {
     list.innerHTML = '<div class="muted">No artifacts yet.</div>';
+    renderRelationEditor();
     renderRelationList();
     return;
   }
@@ -3216,12 +3360,13 @@ function renderConceptList() {
     }
 
     const info = document.createElement("div");
-    const roles = (concept.roles || []).join(", ");
     const sourceCount = concept.source_refs ? concept.source_refs.length : 0;
+    const relationCount = countRelationsForNode("artifact", concept.concept_id);
     info.innerHTML = `
       <div><strong>${concept.concept_id}</strong> ${concept.label}</div>
-      <div class="meta">${concept.type || "Uncategorized"}${roles ? ` • ${roles}` : ""}</div>
+      <div class="meta">${concept.type || "Uncategorized"}</div>
       <div class="meta">Source refs: ${sourceCount}</div>
+      <div class="meta">Relations: ${relationCount}</div>
     `;
     info.addEventListener("click", () => startConceptEdit(concept.concept_id));
 
@@ -3230,12 +3375,15 @@ function renderConceptList() {
     remove.textContent = "Delete";
     remove.addEventListener("click", () => {
       removeHighlightsForSourceRefs("concept", concept.source_refs || []);
+      removeRelationsByNode("artifact", concept.concept_id);
       state.annotations.concepts = state.annotations.concepts.filter((c) => c.concept_id !== concept.concept_id);
       if (state.editing.conceptId === concept.concept_id) {
         state.editing.conceptId = null;
         setConceptButtonMode();
       }
       renderConceptList();
+      renderArgumentList();
+      renderDescriptorList();
       renderArgumentConceptRefs();
       renderDescriptorConceptRefs();
     });
@@ -3245,6 +3393,7 @@ function renderConceptList() {
     list.appendChild(item);
   });
 
+  renderRelationEditor();
   renderRelationList();
 }
 
@@ -3253,6 +3402,7 @@ function renderArgumentList() {
   list.innerHTML = "";
   if (state.annotations.arguments.length === 0) {
     list.innerHTML = '<div class="muted">No arguments yet.</div>';
+    renderRelationEditor();
     renderRelationList();
     return;
   }
@@ -3267,12 +3417,12 @@ function renderArgumentList() {
     const info = document.createElement("div");
     const preview = argument.text ? `${argument.text.slice(0, 80)}${argument.text.length > 80 ? "..." : ""}` : "";
     const conceptCount = argument.concept_refs ? argument.concept_refs.length : 0;
-    const relationCount = argument.artifact_relations ? argument.artifact_relations.length : 0;
+    const relationCount = countRelationsForNode("argument", argument.argument_id);
     info.innerHTML = `
       <div><strong>${argument.argument_id}</strong> ${formatTypeLabel(argument.arg_type || "")}</div>
       <div class="meta">${preview}</div>
       <div class="meta">Artifact refs: ${conceptCount}</div>
-      <div class="meta">Artifact relations: ${relationCount}</div>
+      <div class="meta">Relations: ${relationCount}</div>
     `;
     info.addEventListener("click", () => startArgumentEdit(argument.argument_id));
 
@@ -3281,12 +3431,15 @@ function renderArgumentList() {
     remove.textContent = "Delete";
     remove.addEventListener("click", () => {
       removeHighlightsForSourceRefs("argument", argument.source_refs || []);
+      removeRelationsByNode("argument", argument.argument_id);
       state.annotations.arguments = state.annotations.arguments.filter((a) => a.argument_id !== argument.argument_id);
       if (state.editing.argumentId === argument.argument_id) {
         state.editing.argumentId = null;
         setArgumentButtonMode();
       }
       renderArgumentList();
+      renderConceptList();
+      renderDescriptorList();
     });
 
     item.appendChild(info);
@@ -3294,6 +3447,7 @@ function renderArgumentList() {
     list.appendChild(item);
   });
 
+  renderRelationEditor();
   renderRelationList();
 }
 
@@ -3302,6 +3456,7 @@ function renderDescriptorList() {
   list.innerHTML = "";
   if (state.annotations.descriptors.length === 0) {
     list.innerHTML = '<div class="muted">No descriptors yet.</div>';
+    renderRelationEditor();
     renderRelationList();
     return;
   }
@@ -3315,12 +3470,10 @@ function renderDescriptorList() {
 
     const info = document.createElement("div");
     const artifactCount = descriptor.concept_refs ? descriptor.concept_refs.length : 0;
-    const relationCount = descriptor.artifact_relations ? descriptor.artifact_relations.length : 0;
     const sourceCount = descriptor.source_refs ? descriptor.source_refs.length : 0;
     info.innerHTML = `
       <div><strong>${descriptor.descriptor_id}</strong> ${formatTypeLabel(descriptor.descriptor_type || "")}</div>
       <div class="meta">Artifact refs: ${artifactCount}</div>
-      <div class="meta">Artifact relations: ${relationCount}</div>
       <div class="meta">Source refs: ${sourceCount}</div>
     `;
     info.addEventListener("click", () => startDescriptorEdit(descriptor.descriptor_id));
@@ -3330,6 +3483,7 @@ function renderDescriptorList() {
     remove.textContent = "Delete";
     remove.addEventListener("click", () => {
       removeHighlightsForSourceRefs("descriptor", descriptor.source_refs || []);
+      removeRelationsByNode("descriptor", descriptor.descriptor_id);
       state.annotations.descriptors = state.annotations.descriptors.filter(
         (d) => d.descriptor_id !== descriptor.descriptor_id
       );
@@ -3338,6 +3492,8 @@ function renderDescriptorList() {
         setDescriptorButtonMode();
       }
       renderDescriptorList();
+      renderConceptList();
+      renderArgumentList();
     });
 
     item.appendChild(info);
@@ -3345,6 +3501,7 @@ function renderDescriptorList() {
     list.appendChild(item);
   });
 
+  renderRelationEditor();
   renderRelationList();
 }
 
@@ -3354,7 +3511,6 @@ function renderArgumentConceptRefs() {
 
   if (state.annotations.concepts.length === 0) {
     container.innerHTML = '<div class="muted">Optional. Add artifacts first if needed.</div>';
-    renderArtifactRelationEditor("argument");
     return;
   }
 
@@ -3371,13 +3527,10 @@ function renderArgumentConceptRefs() {
     label.addEventListener("click", () => {
       label.classList.toggle("selected");
       label.dataset.selected = label.classList.contains("selected") ? "true" : "false";
-      renderArtifactRelationEditor("argument");
     });
 
     container.appendChild(label);
   });
-
-  renderArtifactRelationEditor("argument");
 }
 
 function renderDescriptorConceptRefs() {
@@ -3386,7 +3539,6 @@ function renderDescriptorConceptRefs() {
 
   if (state.annotations.concepts.length === 0) {
     container.innerHTML = '<div class="muted">Optional. Add artifacts first if needed.</div>';
-    renderArtifactRelationEditor("descriptor");
     return;
   }
 
@@ -3403,13 +3555,10 @@ function renderDescriptorConceptRefs() {
     label.addEventListener("click", () => {
       label.classList.toggle("selected");
       label.dataset.selected = label.classList.contains("selected") ? "true" : "false";
-      renderArtifactRelationEditor("descriptor");
     });
 
     container.appendChild(label);
   });
-
-  renderArtifactRelationEditor("descriptor");
 }
 
 function populateSelects() {
@@ -3428,6 +3577,85 @@ function populateSelects() {
     option.textContent = formatTypeLabel(type);
     descriptorSelect.appendChild(option);
   });
+}
+
+function setBuilderPanel(panel) {
+  state.builderMode = panel === "relation" ? "relation" : "node";
+  document.querySelectorAll(".builder-main-tab").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.builderPanel === state.builderMode);
+  });
+  const nodePanel = el("builderNodePanel");
+  const relationPanel = el("builderRelationPanel");
+  if (nodePanel) nodePanel.classList.toggle("active", state.builderMode === "node");
+  if (relationPanel) relationPanel.classList.toggle("active", state.builderMode === "relation");
+  if (state.builderMode === "relation") {
+    renderRelationEditor();
+  }
+  updateNotebookCreases();
+}
+
+function setRelationFamily(familyKey) {
+  const family = getRelationFamily(familyKey);
+  state.relationMode = family.key;
+  state.relationDraft = { head_id: "", relation_type: family.types[0] || "", tail_id: "" };
+  document.querySelectorAll(".relation-family-tab").forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.relationFamily === family.key);
+  });
+  renderRelationEditor();
+}
+
+function createRelation() {
+  const family = getRelationFamily(state.relationMode);
+  ensureRelationDraftForFamily(family);
+
+  const headId = String(state.relationDraft.head_id || "").trim();
+  const tailId = String(state.relationDraft.tail_id || "").trim();
+  const relationType = String(state.relationDraft.relation_type || "").trim();
+
+  if (!headId || !tailId || !relationType) {
+    showToast("Select head, relation type, and tail.", "error");
+    return;
+  }
+
+  if (headId === tailId && family.headKind === family.tailKind) {
+    showToast("Head and tail must be different.", "error");
+    return;
+  }
+
+  const exists = (state.annotations.relations || []).some(
+    (relation) =>
+      relation.relation_family === family.key &&
+      relation.relation_type === relationType &&
+      relation.head_id === headId &&
+      relation.tail_id === tailId
+  );
+  if (exists) {
+    showToast("This relation already exists.", "error");
+    return;
+  }
+
+  const nextRelationId = `R${String(
+    (state.annotations.relations || []).reduce((max, relation) => {
+      const match = /^R(\d+)$/.exec(String(relation?.relation_id || ""));
+      const value = match ? Number(match[1]) : 0;
+      return Number.isFinite(value) ? Math.max(max, value) : max;
+    }, 0) + 1
+  ).padStart(2, "0")}`;
+
+  const relation = {
+    relation_id: nextRelationId,
+    relation_family: family.key,
+    relation_type: relationType,
+    head_id: headId,
+    tail_id: tailId,
+    head_kind: family.headKind,
+    tail_kind: family.tailKind,
+  };
+  state.annotations.relations = [...(state.annotations.relations || []), relation];
+  renderConceptList();
+  renderArgumentList();
+  renderDescriptorList();
+  showToast("Relation added.", "success");
 }
 
 function addHighlight(target) {
@@ -3523,14 +3751,12 @@ function createArgument() {
   const existingArgument = editingId
     ? state.annotations.arguments.find((a) => a.argument_id === editingId)
     : null;
-  const artifactRelations = normalizeArtifactRelations(state.editorRelations.argument, conceptRefs);
   const argument = {
     argument_id: editingId || uniqueId("A", state.annotations.arguments),
     text,
     arg_type: argType,
     description: state.argumentDescription.trim() || existingArgument?.description,
     concept_refs: conceptRefs.length ? conceptRefs : undefined,
-    artifact_relations: artifactRelations.length ? artifactRelations : undefined,
     source_refs: sourceRefs.length ? sourceRefs : existingArgument?.source_refs,
   };
 
@@ -3582,12 +3808,10 @@ function createDescriptor() {
   const existingDescriptor = editingId
     ? state.annotations.descriptors.find((d) => d.descriptor_id === editingId)
     : null;
-  const artifactRelations = normalizeArtifactRelations(state.editorRelations.descriptor, conceptRefs);
   const descriptor = {
     descriptor_id: editingId || uniqueId("D", state.annotations.descriptors),
     descriptor_type: descriptorType,
     concept_refs: conceptRefs.length ? conceptRefs : undefined,
-    artifact_relations: artifactRelations.length ? artifactRelations : undefined,
     source_refs: sourceRefs.length ? sourceRefs : existingDescriptor?.source_refs,
   };
 
@@ -3659,6 +3883,10 @@ async function uploadPdf() {
   renderArgumentConceptRefs();
   renderDescriptorConceptRefs();
   renderArtifactTypeSelect();
+  setBuilderPanel("node");
+  setRelationFamily(state.relationMode || relationFamilies[0].key);
+  renderRelationEditor();
+  renderRelationList();
   setConceptButtonMode();
   setArgumentButtonMode();
   setDescriptorButtonMode();
@@ -3689,6 +3917,7 @@ async function submitAnnotations() {
     concepts: state.annotations.concepts,
     arguments: state.annotations.arguments,
     descriptors: state.annotations.descriptors,
+    relations: state.annotations.relations || [],
     created_at: state.annotations.created_at,
     pdf_hash: state.pdfHash,
   };
@@ -3770,6 +3999,10 @@ function init() {
   renderArgumentConceptRefs();
   renderDescriptorConceptRefs();
   renderArtifactTypeSelect();
+  setBuilderPanel(state.builderMode || "node");
+  setRelationFamily(state.relationMode || relationFamilies[0].key);
+  renderRelationEditor();
+  renderRelationList();
   setConceptButtonMode();
   setArgumentButtonMode();
   setDescriptorButtonMode();
@@ -3778,6 +4011,19 @@ function init() {
   wireNavigation();
   wireLibraryControls();
   wireSelectionMenu();
+
+  document.querySelectorAll(".builder-main-tab").forEach((tab) => {
+    tab.addEventListener("click", () => setBuilderPanel(tab.dataset.builderPanel));
+  });
+
+  document.querySelectorAll(".relation-family-tab").forEach((tab) => {
+    tab.addEventListener("click", () => setRelationFamily(tab.dataset.relationFamily));
+  });
+
+  const addRelationBtn = el("addRelationBtn");
+  if (addRelationBtn) {
+    addRelationBtn.addEventListener("click", createRelation);
+  }
 
   const pdfInput = el("pdfInput");
   if (pdfInput) {

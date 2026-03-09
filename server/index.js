@@ -528,6 +528,7 @@ app.post("/api/annotation/:id", (req, res) => {
       concepts: payload.concepts || [],
       arguments: payload.arguments || [],
       descriptors: payload.descriptors || [],
+      relations: payload.relations || [],
       pdf_hash: payload.pdf_hash || "",
       updated_at: now,
       created_at: payload.created_at || now,
@@ -654,6 +655,7 @@ app.get("/api/papers", (req, res) => {
             concepts: loaded.annotation?.concepts || [],
             arguments: loaded.annotation?.arguments || [],
             descriptors: loaded.annotation?.descriptors || [],
+            relations: loaded.annotation?.relations || [],
             updated_at: loaded.annotation?.updated_at || "",
           });
         });
@@ -671,6 +673,7 @@ app.get("/api/papers", (req, res) => {
           concepts: loaded.annotation?.concepts || [],
           arguments: loaded.annotation?.arguments || [],
           descriptors: loaded.annotation?.descriptors || [],
+          relations: loaded.annotation?.relations || [],
           updated_at: loaded.annotation?.updated_at || entry.uploaded_at || "",
         });
       });
