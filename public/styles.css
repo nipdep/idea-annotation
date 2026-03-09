@@ -973,11 +973,56 @@ textarea[readonly] {
 .pdf-highlight-fragment {
   position: absolute;
   border-radius: 2px;
-  background: rgba(238, 207, 127, 0.55);
+  background: rgba(192, 86, 53, 0.16);
+  border: 1px solid rgba(192, 86, 53, 0.35);
 }
 
 .pdf-highlight-fragment.ia-highlight-used {
-  background: rgba(103, 170, 126, 0.45);
+  background: rgba(192, 86, 53, 0.22);
+}
+
+.pdf-highlight-fragment.target-concept {
+  background: rgba(42, 111, 110, 0.14);
+  border-color: rgba(42, 111, 110, 0.34);
+}
+
+.pdf-highlight-fragment.target-concept.ia-highlight-used {
+  background: rgba(42, 111, 110, 0.22);
+}
+
+.pdf-highlight-fragment.target-argument {
+  background: rgba(192, 86, 53, 0.14);
+  border-color: rgba(192, 86, 53, 0.34);
+}
+
+.pdf-highlight-fragment.target-argument.ia-highlight-used {
+  background: rgba(192, 86, 53, 0.22);
+}
+
+.pdf-highlight-fragment.target-descriptor {
+  background: rgba(120, 96, 70, 0.14);
+  border-color: rgba(120, 96, 70, 0.34);
+}
+
+.pdf-highlight-fragment.target-descriptor.ia-highlight-used {
+  background: rgba(120, 96, 70, 0.2);
+}
+
+.pdf-highlight-tag {
+  position: absolute;
+  top: -10px;
+  left: -1px;
+  font-size: 11px;
+  line-height: 1;
+  font-family: "Avenir Next", "Avenir", "Trebuchet MS", "Verdana", sans-serif;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent-2);
+  border-radius: 8px;
+  padding: 2px 6px 3px;
+  box-shadow: 0 3px 8px rgba(30, 27, 22, 0.22);
+  white-space: nowrap;
 }
 
 .pdf-text-layer span,
@@ -1354,6 +1399,21 @@ mark.used {
   color: var(--ink);
 }
 
+.highlight-pill.target-concept {
+  background: rgba(42, 111, 110, 0.1);
+  border-color: rgba(42, 111, 110, 0.3);
+}
+
+.highlight-pill.target-argument {
+  background: rgba(192, 86, 53, 0.1);
+  border-color: rgba(192, 86, 53, 0.3);
+}
+
+.highlight-pill.target-descriptor {
+  background: rgba(120, 96, 70, 0.1);
+  border-color: rgba(120, 96, 70, 0.3);
+}
+
 .highlight-pill-text {
   font-size: 0.9rem;
   line-height: 1.2;
@@ -1363,8 +1423,39 @@ mark.used {
 }
 
 .highlight-pill.selected {
-  background: #bfe8c8;
-  border-color: #7bbf8b;
+  box-shadow: inset 0 0 0 1px rgba(30, 27, 22, 0.12);
+}
+
+.highlight-pill.target-concept.selected {
+  background: rgba(42, 111, 110, 0.2);
+  border-color: rgba(42, 111, 110, 0.42);
+}
+
+.highlight-pill.target-argument.selected {
+  background: rgba(192, 86, 53, 0.2);
+  border-color: rgba(192, 86, 53, 0.42);
+}
+
+.highlight-pill.target-descriptor.selected {
+  background: rgba(120, 96, 70, 0.18);
+  border-color: rgba(120, 96, 70, 0.4);
+}
+
+.highlight-pill-id {
+  position: absolute;
+  top: -8px;
+  left: 10px;
+  font-size: 11px;
+  line-height: 1;
+  font-family: "Avenir Next", "Avenir", "Trebuchet MS", "Verdana", sans-serif;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent-2);
+  border-radius: 8px;
+  padding: 2px 6px 3px;
+  box-shadow: 0 2px 7px rgba(30, 27, 22, 0.2);
+  pointer-events: none;
 }
 
 .highlight-pill-close {

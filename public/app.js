@@ -439,7 +439,7 @@ function clearVirtualHighlights(target) {
   });
 }
 
-function hydrateSourceRefsForEdit(target, sourceRefs, single = false) {
+function hydrateSourceRefsForEdit(target, sourceRefs, single = false, annotationId = "", annotationKind = "") {
   clearVirtualHighlights(target);
   if (target === "concept") {
     state.highlightSelection.concept.clear();
@@ -468,6 +468,8 @@ function hydrateSourceRefsForEdit(target, sourceRefs, single = false) {
       page,
       used: false,
       target,
+      annotation_id: annotationId || "",
+      annotation_kind: annotationKind || "",
       virtual: true,
       anchor: normalizeAnchor(ref.anchor),
     });
@@ -484,7 +486,7 @@ function hydrateSourceRefsForEdit(target, sourceRefs, single = false) {
   }
 }
 
-function hydrateArgumentRefsFromDescription(description, sourceRefs) {
+function hydrateArgumentRefsFromDescription(description, sourceRefs, annotationId = "") {
   clearVirtualHighlights("argument");
   state.highlightSelection.argument.clear();
   updateDescription("argument");
@@ -513,6 +515,8 @@ function hydrateArgumentRefsFromDescription(description, sourceRefs) {
       page,
       used: false,
       target: "argument",
+      annotation_id: annotationId || "",
+      annotation_kind: "argument",
       virtual: true,
       anchor: normalizeAnchor(ref.anchor),
     });
@@ -733,10 +737,23 @@ function renderHighlightOverlayForId(highlightId) {
     overlay.className = "pdf-highlight-fragment";
     overlay.dataset.hid = highlightId;
     overlay.dataset.fragment = String(index);
+    overlay.dataset.target = String(highlight.target || "");
+    if (highlight.annotation_id) {
+      overlay.dataset.annotationId = String(highlight.annotation_id);
+    }
     overlay.style.left = `${Math.max(0, left)}px`;
     overlay.style.top = `${Math.max(0, top)}px`;
     overlay.style.width = `${Math.max(1, width)}px`;
     overlay.style.height = `${Math.max(1, height)}px`;
+    if (highlight.target) {
+      overlay.classList.add(`target-${highlight.target}`);
+    }
+    if (index === 0 && highlight.annotation_id) {
+      const tag = document.createElement("span");
+      tag.className = "pdf-highlight-tag";
+      tag.textContent = String(highlight.annotation_id);
+      overlay.appendChild(tag);
+    }
     syncOverlayUsedState(overlay, highlight.used);
     layer.appendChild(overlay);
   });
@@ -769,6 +786,8 @@ function commitPendingHighlight(target) {
       page: pending.page || "",
       used: false,
       target,
+      annotation_id: "",
+      annotation_kind: "",
       anchor,
     });
     renderHighlightOverlayForId(id);
@@ -1166,7 +1185,7 @@ function hydrateHighlightsFromAnnotations() {
   const hydrated = [];
   let seq = 0;
 
-  const addHighlight = (target, ref, fallbackText = "") => {
+  const addHighlight = (target, ref, fallbackText = "", annotationId = "", annotationKind = "") => {
     if (!ref) return;
     const anchor = normalizeAnchor(ref.anchor);
     const anchorPage = anchor?.fragments?.[0]?.page || "";
@@ -1181,13 +1200,17 @@ function hydrateHighlightsFromAnnotations() {
       page: page || null,
       used: true,
       target,
+      annotation_id: annotationId || "",
+      annotation_kind: annotationKind || "",
       anchor,
       persisted: true,
     });
   };
 
   (state.annotations.concepts || []).forEach((concept) => {
-    (concept.source_refs || []).forEach((ref) => addHighlight("concept", ref, concept.label || ""));
+    (concept.source_refs || []).forEach((ref) =>
+      addHighlight("concept", ref, concept.label || "", concept.concept_id || "", "concept")
+    );
   });
 
   (state.annotations.arguments || []).forEach((argument) => {
@@ -1197,13 +1220,25 @@ function hydrateHighlightsFromAnnotations() {
       .map((part) => part.trim())
       .filter(Boolean);
     refList.forEach((ref, index) => {
-      addHighlight("argument", ref, descParts[index] || argument.text || "");
+      addHighlight(
+        "argument",
+        ref,
+        descParts[index] || argument.text || "",
+        argument.argument_id || "",
+        "argument"
+      );
     });
   });
 
   (state.annotations.descriptors || []).forEach((descriptor) => {
     (descriptor.source_refs || []).forEach((ref) =>
-      addHighlight("descriptor", ref, descriptor.descriptor_type || "")
+      addHighlight(
+        "descriptor",
+        ref,
+        descriptor.descriptor_type || "",
+        descriptor.descriptor_id || "",
+        "descriptor"
+      )
     );
   });
 
@@ -1370,7 +1405,7 @@ function startConceptEdit(conceptId) {
   state.conceptType = resolveArtifactTypeValue(concept.type || "");
   const typeSelect = el("artifactType");
   if (typeSelect) typeSelect.value = state.conceptType;
-  hydrateSourceRefsForEdit("concept", concept.source_refs, true);
+  hydrateSourceRefsForEdit("concept", concept.source_refs, true, concept.concept_id, "concept");
   renderArtifactTypeSelect();
   renderHighlightPickers();
   setConceptButtonMode();
@@ -1390,7 +1425,7 @@ function startArgumentEdit(argumentId) {
   el("argumentText").value = argument.text || "";
   el("argumentType").value = resolveOptionValue(argumentTypes, argument.arg_type) || argumentTypes[0];
   state.argumentDescription = argument.description || "";
-  hydrateArgumentRefsFromDescription(argument.description, argument.source_refs);
+  hydrateArgumentRefsFromDescription(argument.description, argument.source_refs, argument.argument_id);
   renderArgumentConceptRefs();
   const selected = new Set(argument.concept_refs || []);
   el("argumentConceptRefs")
@@ -1417,7 +1452,13 @@ function startDescriptorEdit(descriptorId) {
   activateAnnotationTab("descriptor");
   el("descriptorType").value =
     resolveOptionValue(descriptorTypes, descriptor.descriptor_type) || descriptorTypes[0];
-  hydrateSourceRefsForEdit("descriptor", descriptor.source_refs, false);
+  hydrateSourceRefsForEdit(
+    "descriptor",
+    descriptor.source_refs,
+    false,
+    descriptor.descriptor_id,
+    "descriptor"
+  );
   renderDescriptorConceptRefs();
   const selected = new Set(descriptor.concept_refs || []);
   el("descriptorConceptRefs")
@@ -3111,12 +3152,20 @@ function renderHighlightPickers() {
     available.forEach((hl) => {
       const row = document.createElement("div");
       const selected = state.highlightSelection[key].has(hl.id);
-      row.className = `highlight-pill ${selected ? "selected" : ""}`;
+      const targetClass = hl.target ? `target-${hl.target}` : "";
+      row.className = `highlight-pill ${targetClass} ${selected ? "selected" : ""}`.trim();
       row.title = `Section: ${hl.section}${hl.page ? ` - Page ${hl.page}` : ""}`;
 
       const text = document.createElement("span");
       text.className = "highlight-pill-text";
       text.textContent = hl.text;
+
+      if (hl.annotation_id) {
+        const owner = document.createElement("span");
+        owner.className = "highlight-pill-id";
+        owner.textContent = String(hl.annotation_id);
+        row.appendChild(owner);
+      }
 
       const close = document.createElement("button");
       close.type = "button";
@@ -3169,17 +3218,22 @@ function removeHighlight(id) {
   renderHighlightPickers();
 }
 
-function consumeHighlights(ids) {
+function consumeHighlights(ids, owner = null) {
   ids.forEach((id) => {
     const hl = state.highlights.find((h) => h.id === id);
     if (!hl) return;
     hl.used = true;
+    if (owner?.annotationId) {
+      hl.annotation_id = String(owner.annotationId);
+    }
+    if (owner?.annotationKind) {
+      hl.annotation_kind = String(owner.annotationKind);
+    }
     state.highlightSelection.concept.delete(id);
     state.highlightSelection.argument.delete(id);
     state.highlightSelection.descriptor.delete(id);
-    document
-      .querySelectorAll(`.pdf-highlight-fragment[data-hid="${id}"]`)
-      .forEach((node) => syncOverlayUsedState(node, true));
+    document.querySelectorAll(`.pdf-highlight-fragment[data-hid="${id}"]`).forEach((node) => node.remove());
+    renderHighlightOverlayForId(id);
   });
   updateDescription("argument");
 }
@@ -3712,7 +3766,7 @@ function createConcept() {
     state.annotations.concepts.push(concept);
   }
   if (selectedConceptId) {
-    consumeHighlights([selectedConceptId]);
+    consumeHighlights([selectedConceptId], { annotationId: concept.concept_id, annotationKind: "concept" });
   }
   resetConceptEditor();
   renderConceptList();
@@ -3766,7 +3820,10 @@ function createArgument() {
   } else {
     state.annotations.arguments.push(argument);
   }
-  consumeHighlights(Array.from(state.highlightSelection.argument));
+  consumeHighlights(Array.from(state.highlightSelection.argument), {
+    annotationId: argument.argument_id,
+    annotationKind: "argument",
+  });
   resetArgumentEditor();
   renderArgumentList();
   renderHighlightPickers();
@@ -3821,7 +3878,10 @@ function createDescriptor() {
   } else {
     state.annotations.descriptors.push(descriptor);
   }
-  consumeHighlights(Array.from(state.highlightSelection.descriptor));
+  consumeHighlights(Array.from(state.highlightSelection.descriptor), {
+    annotationId: descriptor.descriptor_id,
+    annotationKind: "descriptor",
+  });
   resetDescriptorEditor();
   renderDescriptorList();
   renderHighlightPickers();
