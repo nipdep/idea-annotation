@@ -1,4 +1,5 @@
 node_modules/
+dataset/
 .tmp/
 tmp/
 dataset/papers/*.pdf
