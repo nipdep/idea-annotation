@@ -934,17 +934,22 @@ function normalizeAnnotations(annotation) {
     .filter(Boolean);
 
   return {
-    concepts: Array.isArray(base.concepts) ? base.concepts : [],
+    concepts: (Array.isArray(base.concepts) ? base.concepts : []).map((concept) => {
+      if (!concept || typeof concept !== "object") return concept;
+      return { ...concept, type: concept.type || "artifact" };
+    }),
     arguments: argumentList.map((argument) => {
       if (!argument || typeof argument !== "object") return argument;
       const copy = { ...argument };
       delete copy.artifact_relations;
+      copy.arg_type = copy.arg_type || "argument";
       return copy;
     }),
     descriptors: descriptorList.map((descriptor) => {
       if (!descriptor || typeof descriptor !== "object") return descriptor;
       const copy = { ...descriptor };
       delete copy.artifact_relations;
+      copy.descriptor_type = copy.descriptor_type || "description";
       return copy;
     }),
     relations: normalizedRelations,
@@ -1354,7 +1359,7 @@ function resetArgumentEditor() {
   state.editing.argumentId = null;
   clearVirtualHighlights("argument");
   el("argumentText").value = "";
-  el("argumentType").value = argumentTypes[0];
+  el("argumentType").value = "";
   state.argumentDescription = "";
   state.highlightSelection.argument.clear();
   updateDescription("argument");
@@ -1369,7 +1374,7 @@ function resetArgumentEditor() {
 function resetDescriptorEditor() {
   state.editing.descriptorId = null;
   clearVirtualHighlights("descriptor");
-  el("descriptorType").value = descriptorTypes[0];
+  el("descriptorType").value = "";
   state.highlightSelection.descriptor.clear();
   el("descriptorConceptRefs")
     .querySelectorAll(".ref-pill")
@@ -1412,7 +1417,11 @@ function startArgumentEdit(argumentId) {
   setBuilderPanel("node");
   activateAnnotationTab("argument");
   el("argumentText").value = argument.text || "";
-  el("argumentType").value = resolveOptionValue(argumentTypes, argument.arg_type) || argumentTypes[0];
+  const argTypeSelect = el("argumentType");
+  const matchedArgType = argumentTypes.find(
+    (type) => type.toLowerCase() === String(argument.arg_type || "").toLowerCase()
+  );
+  if (argTypeSelect) argTypeSelect.value = matchedArgType || "";
   state.argumentDescription = argument.description || "";
   hydrateArgumentRefsFromDescription(argument.description, argument.source_refs, argument.argument_id);
   renderArgumentConceptRefs();
@@ -1439,8 +1448,11 @@ function startDescriptorEdit(descriptorId) {
   state.editing.descriptorId = descriptorId;
   setBuilderPanel("node");
   activateAnnotationTab("descriptor");
-  el("descriptorType").value =
-    resolveOptionValue(descriptorTypes, descriptor.descriptor_type) || descriptorTypes[0];
+  const descriptorTypeSelect = el("descriptorType");
+  const matchedDescriptorType = descriptorTypes.find(
+    (type) => type.toLowerCase() === String(descriptor.descriptor_type || "").toLowerCase()
+  );
+  if (descriptorTypeSelect) descriptorTypeSelect.value = matchedDescriptorType || "";
   hydrateSourceRefsForEdit(
     "descriptor",
     descriptor.source_refs,
@@ -3286,15 +3298,27 @@ function findArgumentLabel(argumentId) {
   return findArgumentLabelFromData(state.annotations, argumentId);
 }
 
+function findDescriptorLabelFromData(data, descriptorId) {
+  const descriptor = (data?.descriptors || []).find((item) => item.descriptor_id === descriptorId);
+  if (!descriptor) return descriptorId;
+  return `${descriptorId} ${formatTypeLabel(descriptor.descriptor_type || "")}`.trim();
+}
+
+function findDescriptorLabel(descriptorId) {
+  return findDescriptorLabelFromData(state.annotations, descriptorId);
+}
+
 function findNodeLabel(kind, id) {
   if (kind === "artifact") return findArtifactLabel(id);
   if (kind === "argument") return findArgumentLabel(id);
+  if (kind === "descriptor") return findDescriptorLabel(id);
   return id;
 }
 
 function findNodeLabelFromData(kind, id, data) {
   if (kind === "artifact") return findArtifactLabelFromData(data, id);
   if (kind === "argument") return findArgumentLabelFromData(data, id);
+  if (kind === "descriptor") return findDescriptorLabelFromData(data, id);
   return id;
 }
 
@@ -3608,6 +3632,11 @@ function renderDescriptorConceptRefs() {
 
 function populateSelects() {
   const argumentSelect = el("argumentType");
+  argumentSelect.innerHTML = "";
+  const argumentPlaceholder = document.createElement("option");
+  argumentPlaceholder.value = "";
+  argumentPlaceholder.textContent = "Base class: argument";
+  argumentSelect.appendChild(argumentPlaceholder);
   argumentTypes.forEach((type) => {
     const option = document.createElement("option");
     option.value = type;
@@ -3616,6 +3645,11 @@ function populateSelects() {
   });
 
   const descriptorSelect = el("descriptorType");
+  descriptorSelect.innerHTML = "";
+  const descriptorPlaceholder = document.createElement("option");
+  descriptorPlaceholder.value = "";
+  descriptorPlaceholder.textContent = "Base class: description";
+  descriptorSelect.appendChild(descriptorPlaceholder);
   descriptorTypes.forEach((type) => {
     const option = document.createElement("option");
     option.value = type;
@@ -3810,11 +3844,7 @@ function createConcept() {
 
   const aliases = normalizeAliases(el("conceptAliases").value);
   const type = resolveArtifactTypeValue(el("artifactType")?.value || state.conceptType || "");
-  state.conceptType = type;
-  if (!type) {
-    showToast("Select an artifact category.", "error");
-    return;
-  }
+  state.conceptType = type || "";
 
   const selectedConceptId = Array.from(state.highlightSelection.concept)[0];
   const sourceRefs = selectedConceptId
@@ -3840,7 +3870,7 @@ function createConcept() {
     concept_id: editingId || uniqueId("C", state.annotations.concepts),
     label,
     aliases: aliases.length ? aliases : undefined,
-    type,
+    type: type || "artifact",
     source_refs: sourceRefs.length ? sourceRefs : existingConcept?.source_refs,
   };
 
@@ -3870,7 +3900,7 @@ function createArgument() {
     return;
   }
 
-  const argType = el("argumentType").value;
+  const argType = String(el("argumentType").value || "").trim();
   const conceptRefs = Array.from(el("argumentConceptRefs").querySelectorAll(".ref-pill.selected")).map(
     (pill) => pill.dataset.conceptId
   );
@@ -3893,7 +3923,7 @@ function createArgument() {
   const argument = {
     argument_id: editingId || uniqueId("A", state.annotations.arguments),
     text,
-    arg_type: argType,
+    arg_type: argType || "argument",
     description: state.argumentDescription.trim() || existingArgument?.description,
     concept_refs: conceptRefs.length ? conceptRefs : undefined,
     source_refs: sourceRefs.length ? sourceRefs : existingArgument?.source_refs,
@@ -3918,11 +3948,7 @@ function createArgument() {
 }
 
 function createDescriptor() {
-  const descriptorType = el("descriptorType").value;
-  if (!descriptorType) {
-    showToast("Select a descriptor type.", "error");
-    return;
-  }
+  const descriptorType = String(el("descriptorType").value || "").trim();
 
   const conceptRefs = Array.from(el("descriptorConceptRefs").querySelectorAll(".ref-pill.selected")).map(
     (pill) => pill.dataset.conceptId
@@ -3952,7 +3978,7 @@ function createDescriptor() {
     : null;
   const descriptor = {
     descriptor_id: editingId || uniqueId("D", state.annotations.descriptors),
-    descriptor_type: descriptorType,
+    descriptor_type: descriptorType || "description",
     concept_refs: conceptRefs.length ? conceptRefs : undefined,
     source_refs: sourceRefs.length ? sourceRefs : existingDescriptor?.source_refs,
   };

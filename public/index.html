@@ -105,7 +105,7 @@
               <div class="stack">
                 <label>Label <span class="required">*</span><input id="conceptLabel" type="text" placeholder="e.g., Latent Dirichlet Allocation" /></label>
                 <label>Aliases <input id="conceptAliases" type="text" placeholder="Comma-separated" /></label>
-                <label>Category <span class="required">*</span>
+                <label>Category
                   <select id="artifactType"></select>
                 </label>
               </div>
@@ -121,7 +121,7 @@
                 <label>Canonical Text <span class="required">*</span>
                   <textarea id="argumentText" rows="4" placeholder="Minimal assertion..."></textarea>
                 </label>
-                <label>Type <span class="required">*</span>
+                <label>Type
                   <select id="argumentType"></select>
                 </label>
                 <label>Artifact refs
@@ -137,7 +137,7 @@
 
             <div id="descriptorTab" class="tab-content">
               <div class="stack">
-                <label>Type <span class="required">*</span>
+                <label>Type
                   <select id="descriptorType"></select>
                 </label>
                 <label>Artifact refs
@@ -201,18 +201,18 @@
             <div>
               <div class="subhead">Artifacts</div>
               <p>Choose the most specific category available. You can stop at any level if no finer match exists.</p>
-              <p>Required fields: label and category.</p>
+              <p>Required field: label. Category is optional and defaults to base class <code>artifact</code>.</p>
             </div>
 
             <div>
               <div class="subhead">Arguments</div>
-              <p>Required fields: canonical text and argument type. Artifact refs are optional.</p>
-              <p>Required types for submission: issue, idea, approach, claim.</p>
+              <p>Required field: canonical text. Type is optional and defaults to base class <code>argument</code>.</p>
+              <p>Suggested coverage: issue, idea, approach, and claim.</p>
             </div>
 
             <div>
               <div class="subhead">Descriptors</div>
-              <p>Required fields: descriptor type and source refs. Artifact refs are optional.</p>
+              <p>Required field: source refs. Type is optional and defaults to base class <code>description</code>.</p>
               <p>Descriptor type values: description, definition, composition, comparison, limitation.</p>
             </div>
 
