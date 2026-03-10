@@ -520,14 +520,35 @@ app.post("/api/annotation/:id", (req, res) => {
     const payload = req.body || {};
     const now = new Date().toISOString();
     const metadata = sanitizeMetadata(payload.metadata || {});
+    const concepts = Array.isArray(payload.concepts)
+      ? payload.concepts.map((concept) => {
+          if (!concept || typeof concept !== "object") return concept;
+          return { ...concept, type: String(concept.type || "").trim() || "artifact" };
+        })
+      : [];
+    const argumentsList = Array.isArray(payload.arguments)
+      ? payload.arguments.map((argument) => {
+          if (!argument || typeof argument !== "object") return argument;
+          return { ...argument, arg_type: String(argument.arg_type || "").trim() || "argument" };
+        })
+      : [];
+    const descriptors = Array.isArray(payload.descriptors)
+      ? payload.descriptors.map((descriptor) => {
+          if (!descriptor || typeof descriptor !== "object") return descriptor;
+          return {
+            ...descriptor,
+            descriptor_type: String(descriptor.descriptor_type || "").trim() || "description",
+          };
+        })
+      : [];
     const out = {
       paper_id: paperId,
       schema_version: "0.1",
       metadata,
       metadata_checks: payload.metadata_checks || {},
-      concepts: payload.concepts || [],
-      arguments: payload.arguments || [],
-      descriptors: payload.descriptors || [],
+      concepts,
+      arguments: argumentsList,
+      descriptors,
       relations: payload.relations || [],
       pdf_hash: payload.pdf_hash || "",
       updated_at: now,

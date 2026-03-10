@@ -943,6 +943,11 @@ function normalizeAnnotations(annotation) {
       const copy = { ...argument };
       delete copy.artifact_relations;
       copy.arg_type = copy.arg_type || "argument";
+      const sourceText = Array.isArray(copy.source_refs)
+        ? copy.source_refs.map((ref) => String(ref?.text || "").trim()).find(Boolean)
+        : "";
+      const descriptionText = String(copy.description || "").split(/\n{2,}/).map((part) => part.trim()).find(Boolean);
+      copy.text = String(copy.text || "").trim() || descriptionText || sourceText || "argument";
       return copy;
     }),
     descriptors: descriptorList.map((descriptor) => {
@@ -1358,7 +1363,6 @@ function resetConceptEditor() {
 function resetArgumentEditor() {
   state.editing.argumentId = null;
   clearVirtualHighlights("argument");
-  el("argumentText").value = "";
   el("argumentType").value = "";
   state.argumentDescription = "";
   state.highlightSelection.argument.clear();
@@ -1416,7 +1420,6 @@ function startArgumentEdit(argumentId) {
   state.editing.argumentId = argumentId;
   setBuilderPanel("node");
   activateAnnotationTab("argument");
-  el("argumentText").value = argument.text || "";
   const argTypeSelect = el("argumentType");
   const matchedArgType = argumentTypes.find(
     (type) => type.toLowerCase() === String(argument.arg_type || "").toLowerCase()
@@ -1500,7 +1503,9 @@ function flattenAuthors(authors) {
 function librarySearchText(item) {
   const metadata = item.metadata || {};
   const conceptLabels = (item.concepts || []).map((c) => c.label || "").join(" ");
-  const argumentTexts = (item.arguments || []).map((a) => a.text || "").join(" ");
+  const argumentTexts = (item.arguments || [])
+    .map((a) => `${a.text || ""} ${a.description || ""}`)
+    .join(" ");
   const descriptorTypesText = (item.descriptors || []).map((d) => d.descriptor_type || "").join(" ");
   return [
     metadata.title || "",
@@ -3894,12 +3899,6 @@ function createConcept() {
 }
 
 function createArgument() {
-  const text = el("argumentText").value.trim();
-  if (!text) {
-    showToast("Add canonical text for the argument.", "error");
-    return;
-  }
-
   const argType = String(el("argumentType").value || "").trim();
   const conceptRefs = Array.from(el("argumentConceptRefs").querySelectorAll(".ref-pill.selected")).map(
     (pill) => pill.dataset.conceptId
@@ -3920,13 +3919,24 @@ function createArgument() {
   const existingArgument = editingId
     ? state.annotations.arguments.find((a) => a.argument_id === editingId)
     : null;
+  const mergedSourceRefs = sourceRefs.length ? sourceRefs : existingArgument?.source_refs || [];
+  const sourceText = mergedSourceRefs
+    .map((ref) => String(ref?.text || "").trim())
+    .filter(Boolean)
+    .join("\n\n");
+  const description = state.argumentDescription.trim() || sourceText || existingArgument?.description || "";
+  const text =
+    description.split(/\n{2,}/).map((chunk) => chunk.trim()).find(Boolean) ||
+    String(mergedSourceRefs[0]?.text || "").trim() ||
+    String(existingArgument?.text || "").trim() ||
+    "argument";
   const argument = {
     argument_id: editingId || uniqueId("A", state.annotations.arguments),
     text,
     arg_type: argType || "argument",
-    description: state.argumentDescription.trim() || existingArgument?.description,
+    description,
     concept_refs: conceptRefs.length ? conceptRefs : undefined,
-    source_refs: sourceRefs.length ? sourceRefs : existingArgument?.source_refs,
+    source_refs: mergedSourceRefs.length ? mergedSourceRefs : undefined,
   };
 
   if (editingId) {
