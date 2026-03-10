@@ -1337,6 +1337,12 @@ mark.used {
   padding-right: 4px;
 }
 
+#argumentConceptRefs,
+#descriptorConceptRefs {
+  min-height: 150px;
+  max-height: 170px;
+}
+
 .hidden {
   display: none !important;
 }
@@ -1353,6 +1359,13 @@ mark.used {
   flex: 1;
   min-height: 0;
   padding-top: 12px;
+}
+
+#argumentTab .source-refs,
+#descriptorTab .source-refs {
+  flex: 0 0 180px;
+  min-height: 180px;
+  max-height: 180px;
 }
 
 .tag {
