@@ -81,6 +81,13 @@ const relationFamilies = [
       "elaborates(A, B)",
     ],
   },
+  {
+    key: "descriptor-artifact",
+    label: "Descriptor ↔ Artifact",
+    headKind: "descriptor",
+    tailKind: "artifact",
+    types: ["about"],
+  },
 ];
 
 const state = {
@@ -905,6 +912,8 @@ function normalizeAnnotations(annotation) {
     .map((relation, index) => {
       const familyKey = String(relation?.relation_family || "").trim() || "artifact-artifact";
       const family = relationFamilies.find((item) => item.key === familyKey) || relationFamilies[0];
+      const headKind = String(relation?.head_kind || "").trim() || family.headKind;
+      const tailKind = String(relation?.tail_kind || "").trim() || family.tailKind;
       const headId = String(relation?.head_id || "").trim();
       const tailId = String(relation?.tail_id || "").trim();
       const relationType = formatRelationLabel(relation?.relation_type || "");
@@ -917,8 +926,9 @@ function normalizeAnnotations(annotation) {
         relation_type: matchedType,
         head_id: headId,
         tail_id: tailId,
-        head_kind: family.headKind,
-        tail_kind: family.tailKind,
+        head_kind: headKind,
+        tail_kind: tailKind,
+        from_refs: !!relation?.from_refs,
       };
     })
     .filter(Boolean);
@@ -961,6 +971,12 @@ function getRelationNodeOptions(kind) {
     return (state.annotations.arguments || []).map((argument) => ({
       id: argument.argument_id,
       label: `${argument.argument_id} ${formatTypeLabel(argument.arg_type || "")}`.trim(),
+    }));
+  }
+  if (kind === "descriptor") {
+    return (state.annotations.descriptors || []).map((descriptor) => ({
+      id: descriptor.descriptor_id,
+      label: `${descriptor.descriptor_id} ${formatTypeLabel(descriptor.descriptor_type || "")}`.trim(),
     }));
   }
   return [];
@@ -1033,11 +1049,13 @@ function renderRelationEditorList() {
     const item = document.createElement("div");
     item.className = "relation-item";
 
+    const headKind = relation.head_kind || family.headKind;
+    const tailKind = relation.tail_kind || family.tailKind;
     const headLabel =
-      getRelationNodeOptions(family.headKind).find((option) => option.id === relation.head_id)?.label ||
+      getRelationNodeOptions(headKind).find((option) => option.id === relation.head_id)?.label ||
       relation.head_id;
     const tailLabel =
-      getRelationNodeOptions(family.tailKind).find((option) => option.id === relation.tail_id)?.label ||
+      getRelationNodeOptions(tailKind).find((option) => option.id === relation.tail_id)?.label ||
       relation.tail_id;
 
     const text = document.createElement("div");
@@ -3307,11 +3325,13 @@ function countRelationsForNode(kind, nodeId) {
 function collectAnnotatedRelations() {
   return (state.annotations.relations || []).map((relation) => {
     const family = getRelationFamily(relation.relation_family);
+    const headKind = relation.head_kind || family.headKind;
+    const tailKind = relation.tail_kind || family.tailKind;
     return {
       relation,
       family,
-      headLabel: findNodeLabel(family.headKind, relation.head_id),
-      tailLabel: findNodeLabel(family.tailKind, relation.tail_id),
+      headLabel: findNodeLabel(headKind, relation.head_id),
+      tailLabel: findNodeLabel(tailKind, relation.tail_id),
     };
   });
 }
@@ -3683,6 +3703,100 @@ function createRelation() {
   showToast("Relation added.", "success");
 }
 
+function relationTypeKey(value) {
+  const label = formatRelationLabel(value || "").toLowerCase().trim();
+  return label.split("(")[0].trim();
+}
+
+function buildRelationsForSubmit() {
+  const normalized = (state.annotations.relations || [])
+    .map((relation, index) => {
+      const family = getRelationFamily(relation.relation_family);
+      const headKind = String(relation.head_kind || family.headKind || "").trim();
+      const tailKind = String(relation.tail_kind || family.tailKind || "").trim();
+      const headId = String(relation.head_id || "").trim();
+      const tailId = String(relation.tail_id || "").trim();
+      const relationType = formatRelationLabel(relation.relation_type || "").trim();
+      if (!headKind || !tailKind || !headId || !tailId || !relationType) return null;
+      return {
+        relation_id: String(relation.relation_id || `R${String(index + 1).padStart(2, "0")}`),
+        relation_family: family.key,
+        relation_type: relationType,
+        head_kind: headKind,
+        tail_kind: tailKind,
+        head_id: headId,
+        tail_id: tailId,
+        from_refs: !!relation.from_refs,
+      };
+    })
+    .filter(Boolean);
+
+  const keyOf = (relation) =>
+    [
+      relation.relation_family,
+      relation.head_kind,
+      relation.head_id,
+      relationTypeKey(relation.relation_type),
+      relation.tail_kind,
+      relation.tail_id,
+    ].join("|");
+
+  const keySet = new Set(normalized.map((relation) => keyOf(relation)));
+  let maxNumericId = normalized.reduce((max, relation) => {
+    const match = /^R(\d+)$/.exec(String(relation.relation_id || ""));
+    const value = match ? Number(match[1]) : 0;
+    return Number.isFinite(value) ? Math.max(max, value) : max;
+  }, 0);
+
+  const addDerived = (relation) => {
+    const relationKey = keyOf(relation);
+    if (keySet.has(relationKey)) return;
+    maxNumericId += 1;
+    normalized.push({
+      relation_id: `R${String(maxNumericId).padStart(2, "0")}`,
+      ...relation,
+      from_refs: true,
+    });
+    keySet.add(relationKey);
+  };
+
+  (state.annotations.arguments || []).forEach((argument) => {
+    const argumentId = String(argument.argument_id || "").trim();
+    if (!argumentId) return;
+    (Array.isArray(argument.concept_refs) ? argument.concept_refs : []).forEach((conceptIdRaw) => {
+      const conceptId = String(conceptIdRaw || "").trim();
+      if (!conceptId) return;
+      addDerived({
+        relation_family: "argument-artifact",
+        relation_type: "about",
+        head_kind: "argument",
+        tail_kind: "artifact",
+        head_id: argumentId,
+        tail_id: conceptId,
+      });
+    });
+  });
+
+  (state.annotations.descriptors || []).forEach((descriptor) => {
+    const descriptorId = String(descriptor.descriptor_id || "").trim();
+    if (!descriptorId) return;
+    (Array.isArray(descriptor.concept_refs) ? descriptor.concept_refs : []).forEach((conceptIdRaw) => {
+      const conceptId = String(conceptIdRaw || "").trim();
+      if (!conceptId) return;
+      addDerived({
+        relation_family: "descriptor-artifact",
+        relation_type: "about",
+        head_kind: "descriptor",
+        tail_kind: "artifact",
+        head_id: descriptorId,
+        tail_id: conceptId,
+      });
+    });
+  });
+
+  return normalized;
+}
+
 function addHighlight(target) {
   commitPendingHighlight(target);
 }
@@ -3942,13 +4056,17 @@ async function submitAnnotations() {
     return;
   }
 
+  const finalRelations = buildRelationsForSubmit();
+  state.annotations.relations = finalRelations;
+  renderRelationList();
+
   const payload = {
     metadata: state.metadata,
     metadata_checks: state.metadataChecks,
     concepts: state.annotations.concepts,
     arguments: state.annotations.arguments,
     descriptors: state.annotations.descriptors,
-    relations: state.annotations.relations || [],
+    relations: finalRelations,
     created_at: state.annotations.created_at,
     pdf_hash: state.pdfHash,
   };
