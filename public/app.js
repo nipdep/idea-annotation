@@ -795,7 +795,6 @@ function commitPendingHighlight(target) {
     if (target === "argument") {
       state.highlightSelection.argument.add(id);
       updateDescription("argument");
-      requestNormalization(pending.text);
     } else if (target === "descriptor") {
       state.highlightSelection.descriptor.add(id);
     } else {
@@ -815,34 +814,6 @@ function commitPendingHighlight(target) {
     renderHighlightPickers();
   } catch (err) {
     showToast("Could not create highlight. Try a smaller selection.", "error");
-  }
-}
-
-async function requestNormalization(text) {
-  const textArea = el("argumentText");
-  if (!textArea) return;
-  textArea.value = "Generating suggestion...";
-  textArea.readOnly = true;
-  textArea.classList.add("loading");
-  const toast = showToast("Generating canonical statement...", "loading", { persist: true });
-
-  try {
-    const res = await fetch(withBase("/api/normalize"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    if (!res.ok) throw new Error("LLM request failed");
-    const data = await res.json();
-    const suggestion = data.normalized || text;
-    textArea.value = suggestion;
-  } catch (err) {
-    textArea.value = text;
-    showToast("LLM suggestion failed. Using original text.", "error");
-  } finally {
-    textArea.readOnly = false;
-    textArea.classList.remove("loading");
-    if (toast) toast.remove();
   }
 }
 
