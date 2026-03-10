@@ -7,7 +7,7 @@ const artifactTypes = [
   "Metric",
   "Component",
   "Hyperparameter",
-  "Resourcez",
+  "Resource",
 ];
 
 const argumentTypes = [
