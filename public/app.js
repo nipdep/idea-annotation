@@ -1,13 +1,9 @@
 const artifactTypes = [
-  "Model",
-  "Dataset",
-  "Framework",
-  "Algorithm",
   "Task",
+  "Method",
   "Metric",
-  "Component",
-  "Hyperparameter",
-  "Resource",
+  "Material",
+  "Term",
 ];
 
 const argumentTypes = [
@@ -17,19 +13,23 @@ const argumentTypes = [
   "Evidence",
   "Claim",
   "Warrant",
-  "Backing",
   "Qualifier",
+  "Backing",
   "Rebuttal",
 ];
 
 const descriptorTypes = [
-  "Definition",
-  "Composition",
-  "Usage",
-  "Setting",
-  "Assumption",
-  "Limitation",
-  "Comparison",
+  "Elaboration",
+  "Circumstance",
+  "Solutionhood",
+  "Cause",
+  "Result",
+  "Purpose",
+  "Condition",
+  "Interpretation",
+  "Evaluation",
+  "Restatement",
+  "Summary",
 ];
 
 const relationFamilies = [
@@ -39,13 +39,12 @@ const relationFamilies = [
     headKind: "artifact",
     tailKind: "artifact",
     types: [
-      "extends(Model, Model)",
-      "basedOn(Artifact, Artifact)",
-      "usesComponent(Artifact, Component)",
-      "evaluatedOn(Model, Dataset)",
-      "implements(Model, Algorithm)",
-      "comparedTo(Model, Model)",
-      "outperforms(Model, Model)",
+      "usedFor",
+      "FeatureOf",
+      "HyponymOf",
+      "PartOf",
+      "closeMatch",
+      "altLabel",
     ],
   },
   {
@@ -54,14 +53,13 @@ const relationFamilies = [
     headKind: "argument",
     tailKind: "artifact",
     types: [
-      "introduces(approach, artifact)",
-      "uses(approach, artifact)",
-      "evaluates(evidence, artifact)",
-      "compares(argument, artifact)",
-      "targets(approach, task)",
-      "measures(evidence, metric)",
-      "reportson(evidence, dataset)",
-      "about(argument, artifact)",
+      "motivates(Argument, Artifact)",
+      "contrast(Argument, Artifact)",
+      "contextualize(Argument, Artifact)",
+      "enables(Argument, Artifact)",
+      "supports(Argument, Artifact)",
+      "justify(Argument, Artifact)",
+      "concede(Argument, Artifact)",
     ],
   },
   {
@@ -70,15 +68,15 @@ const relationFamilies = [
     headKind: "argument",
     tailKind: "argument",
     types: [
-      "resolves(Idea, Issue)",
-      "realizes(Idea, Approach)",
-      "generates(Approach, Evidence)",
-      "supports(Evidence, Claim)",
-      "warrants(Claim, Warrant)",
-      "backs(Claim, Backing)",
-      "qualifies(Claim, Qualifier)",
-      "rebuts(Claim, Rebuttal)",
-      "elaborates(A, B)",
+      "responsesTo(Idea, Issue)",
+      "motivates(Idea, Approach)",
+      "evidence(Idea, Evidence)",
+      "proves(Evidence, Claim)",
+      "supports(Warrant, Warrant)",
+      "leadsTo(Warrant, Claim)",
+      "backs(Backing, Warrant)",
+      "forces(Qualifier, Claim)",
+      "isValidUnless(Claim, Rebuttal)",
     ],
   },
   {
@@ -832,7 +830,7 @@ function formatTypeLabel(value) {
 }
 
 function formatRelationLabel(value) {
-  return String(value || "").replace(/^sudo:/, "");
+  return String(value || "").replace(/^(sudo:|sko:)/, "");
 }
 
 function resolveArtifactTypeValue(value) {
@@ -1105,6 +1103,10 @@ function renderRelationEditor() {
     label: option.label,
   }));
   const typeOptions = family.types.map((type) => ({ value: type, label: type }));
+  const currentType = String(state.relationDraft.relation_type || "").trim();
+  if (currentType && !typeOptions.some((option) => option.value.toLowerCase() === currentType.toLowerCase())) {
+    typeOptions.unshift({ value: currentType, label: currentType });
+  }
   let tailOptions = getRelationNodeOptions(family.tailKind).map((option) => ({
     value: option.id,
     label: option.label,
