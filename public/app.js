@@ -84,7 +84,7 @@ const relationFamilies = [
     label: "Descriptor ↔ Artifact",
     headKind: "descriptor",
     tailKind: "artifact",
-    types: ["about"],
+    types: ["mentions"],
   },
 ];
 
@@ -3757,7 +3757,13 @@ function buildRelationsForSubmit() {
       const tailKind = String(relation.tail_kind || family.tailKind || "").trim();
       const headId = String(relation.head_id || "").trim();
       const tailId = String(relation.tail_id || "").trim();
-      const relationType = formatRelationLabel(relation.relation_type || "").trim();
+      let relationType = formatRelationLabel(relation.relation_type || "").trim();
+      if (
+        relationTypeKey(relationType) === "about" &&
+        (family.key === "argument-artifact" || family.key === "descriptor-artifact")
+      ) {
+        relationType = "mentions";
+      }
       if (!headKind || !tailKind || !headId || !tailId || !relationType) return null;
       return {
         relation_id: String(relation.relation_id || `R${String(index + 1).padStart(2, "0")}`),
@@ -3809,7 +3815,7 @@ function buildRelationsForSubmit() {
       if (!conceptId) return;
       addDerived({
         relation_family: "argument-artifact",
-        relation_type: "about",
+        relation_type: "mentions",
         head_kind: "argument",
         tail_kind: "artifact",
         head_id: argumentId,
@@ -3826,7 +3832,7 @@ function buildRelationsForSubmit() {
       if (!conceptId) return;
       addDerived({
         relation_family: "descriptor-artifact",
-        relation_type: "about",
+        relation_type: "mentions",
         head_kind: "descriptor",
         tail_kind: "artifact",
         head_id: descriptorId,
