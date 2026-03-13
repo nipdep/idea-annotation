@@ -1010,18 +1010,18 @@ textarea[readonly] {
 
 .pdf-highlight-tag {
   position: absolute;
-  top: -10px;
+  top: -8px;
   left: -1px;
-  font-size: 11px;
+  font-size: 9px;
   line-height: 1;
   font-family: "Avenir Next", "Avenir", "Trebuchet MS", "Verdana", sans-serif;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   font-weight: 700;
   color: #fff;
   background: var(--accent-2);
-  border-radius: 8px;
-  padding: 2px 6px 3px;
-  box-shadow: 0 3px 8px rgba(30, 27, 22, 0.22);
+  border-radius: 6px;
+  padding: 1px 5px 2px;
+  box-shadow: 0 2px 6px rgba(30, 27, 22, 0.18);
   white-space: nowrap;
 }
 
@@ -1456,18 +1456,18 @@ mark.used {
 
 .highlight-pill-id {
   position: absolute;
-  top: -8px;
+  top: -7px;
   left: 10px;
-  font-size: 11px;
+  font-size: 9px;
   line-height: 1;
   font-family: "Avenir Next", "Avenir", "Trebuchet MS", "Verdana", sans-serif;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   font-weight: 700;
   color: #fff;
   background: var(--accent-2);
-  border-radius: 8px;
-  padding: 2px 6px 3px;
-  box-shadow: 0 2px 7px rgba(30, 27, 22, 0.2);
+  border-radius: 6px;
+  padding: 1px 5px 2px;
+  box-shadow: 0 2px 6px rgba(30, 27, 22, 0.18);
   pointer-events: none;
 }
 
