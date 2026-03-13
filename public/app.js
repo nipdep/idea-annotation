@@ -84,7 +84,19 @@ const relationFamilies = [
     label: "Descriptor ↔ Artifact",
     headKind: "descriptor",
     tailKind: "artifact",
-    types: ["mentions"],
+    types: [
+      "elaborates(Elaboration, Artifact)",
+      "contextualizes(Circumstance, Artifact)",
+      "solves(Solutionhood, Artifact)",
+      "causes(Cause, Artifact)",
+      "result(Result, Artifact)",
+      "purposes(Purpose, Artifact)",
+      "condition(Condition, Artifact)",
+      "interprets(Interpretation, Artifact)",
+      "evaluates(Evaluation, Artifact)",
+      "restates(Restatement, Artifact)",
+      "summarizes(Summary, Artifact)",
+    ],
   },
 ];
 
