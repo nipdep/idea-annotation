@@ -4019,6 +4019,54 @@ function createDescriptor() {
   }
 }
 
+function resetAnnotationsForCleanUpload() {
+  state.annotations = normalizeAnnotations(null);
+  state.highlights = [];
+  state.virtualHighlightSeq = 0;
+  state.argumentDescription = "";
+  state.pendingSelection = null;
+  state.highlightSelection.concept.clear();
+  state.highlightSelection.argument.clear();
+  state.highlightSelection.descriptor.clear();
+  state.editing.conceptId = null;
+  state.editing.argumentId = null;
+  state.editing.descriptorId = null;
+  state.conceptType = "";
+
+  const family = getRelationFamily(state.relationMode || relationFamilies[0].key);
+  state.relationDraft = {
+    head_id: "",
+    relation_type: family.types[0] || "",
+    tail_id: "",
+  };
+
+  const conceptLabel = el("conceptLabel");
+  if (conceptLabel) conceptLabel.value = "";
+  const conceptAliases = el("conceptAliases");
+  if (conceptAliases) conceptAliases.value = "";
+  const artifactType = el("artifactType");
+  if (artifactType) artifactType.value = "";
+  const argumentType = el("argumentType");
+  if (argumentType) argumentType.value = "";
+  const descriptorType = el("descriptorType");
+  if (descriptorType) descriptorType.value = "";
+
+  hideSelectionMenu();
+  renderArtifactTypeSelect();
+  renderHighlightPickers();
+  renderConceptList();
+  renderArgumentList();
+  renderDescriptorList();
+  renderArgumentConceptRefs();
+  renderDescriptorConceptRefs();
+  renderRelationEditor();
+  renderRelationList();
+  setConceptButtonMode();
+  setArgumentButtonMode();
+  setDescriptorButtonMode();
+  updateDescription("argument");
+}
+
 async function uploadPdf() {
   const file = el("pdfInput").files[0];
   if (!file) {
@@ -4027,6 +4075,7 @@ async function uploadPdf() {
   }
   clearParseStatusMonitor(true);
   setLocalPdfUrlFromFile(file);
+  resetAnnotationsForCleanUpload();
 
   const form = new FormData();
   form.append("file", file);
