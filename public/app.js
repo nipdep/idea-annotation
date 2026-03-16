@@ -49,17 +49,17 @@ const relationFamilies = [
   },
   {
     key: "argument-artifact",
-    label: "Argument ↔ Artifact",
-    headKind: "argument",
-    tailKind: "artifact",
+    label: "Artifact ↔ Argument",
+    headKind: "artifact",
+    tailKind: "argument",
     types: [
-      "motivates(Argument, Artifact)",
-      "contrast(Argument, Artifact)",
-      "contextualize(Argument, Artifact)",
-      "enables(Argument, Artifact)",
-      "supports(Argument, Artifact)",
-      "justify(Argument, Artifact)",
-      "concede(Argument, Artifact)",
+      "motivates(Artifact, Argument)",
+      "contrast(Artifact, Argument)",
+      "contextualize(Artifact, Argument)",
+      "enables(Artifact, Argument)",
+      "supports(Artifact, Argument)",
+      "justify(Artifact, Argument)",
+      "concede(Artifact, Argument)",
     ],
   },
   {
@@ -3828,10 +3828,10 @@ function buildRelationsForSubmit() {
       addDerived({
         relation_family: "argument-artifact",
         relation_type: "mentions",
-        head_kind: "argument",
-        tail_kind: "artifact",
-        head_id: argumentId,
-        tail_id: conceptId,
+        head_kind: "artifact",
+        tail_kind: "argument",
+        head_id: conceptId,
+        tail_id: argumentId,
       });
     });
   });

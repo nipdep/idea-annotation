@@ -16,17 +16,27 @@ try {
 }
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-const DATASET_DIR = path.join(__dirname, "..", "dataset", "papers");
-const TMP_DIR = path.join(__dirname, "..", "tmp");
+const PORT = Number(process.env.PORT || process.env.APP_PORT) || 3000;
+const DATA_ROOT = path.resolve(process.env.DATA_ROOT || path.join(__dirname, "..", "dataset"));
+const DATASET_DIR = path.resolve(process.env.DATASET_DIR || path.join(DATA_ROOT, "papers"));
+const TMP_DIR = path.resolve(process.env.TMP_DIR || path.join(__dirname, "..", "tmp"));
 const INDEX_PATH = path.join(DATASET_DIR, "index.json");
 const GROBID_URL = process.env.GROBID_URL || "http://localhost:8070";
 const LLM_URL = process.env.LLM_URL || "http://localhost:1234/v1/chat/completions";
 const LLM_MODEL = process.env.LLM_MODEL || "qwen2.5-7b-instruct-1m";
 const LLM_MODE = process.env.LLM_MODE || "chat";
-const BASE_PATH = (process.env.BASE_PATH || "/").replace(/\/?$/, "/");
 const PDFJS_DIR = path.join(__dirname, "..", "node_modules", "pdfjs-dist");
 const parseJobs = new Map();
+
+function normalizeBaseUrl(rawValue) {
+  const text = String(rawValue || "").trim();
+  if (!text || text === "/") return "/";
+  const withLeading = text.startsWith("/") ? text : `/${text}`;
+  return withLeading.replace(/\/+$/, "");
+}
+
+const BASE_URL = normalizeBaseUrl(process.env.BASE_URL || process.env.BASE_PATH || "/");
+const BASE_PATH = BASE_URL === "/" ? "/" : `${BASE_URL}/`;
 
 app.use(express.json({ limit: "10mb" }));
 
@@ -159,8 +169,27 @@ function loadPaper(paperId) {
 function renderIndex(res) {
   const indexPath = path.join(__dirname, "..", "public", "index.html");
   let html = fs.readFileSync(indexPath, "utf8");
-  html = html.replace("{{BASE_PATH}}", BASE_PATH);
+  html = html.split("{{BASE_PATH}}").join(BASE_PATH);
   res.type("html").send(html);
+}
+
+if (BASE_URL !== "/") {
+  app.use((req, _res, next) => {
+    const basePrefix = BASE_URL;
+    if (req.url === basePrefix) {
+      req.url = "/";
+      return next();
+    }
+    if (req.url.startsWith(`${basePrefix}/`)) {
+      req.url = req.url.slice(basePrefix.length) || "/";
+      return next();
+    }
+    if (req.url.startsWith(`${basePrefix}?`)) {
+      req.url = `/${req.url.slice(basePrefix.length)}`;
+      return next();
+    }
+    return next();
+  });
 }
 
 app.get("/", (req, res) => renderIndex(res));
@@ -717,5 +746,8 @@ app.get("/api/annotation/:id", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Annotator running at http://localhost:${PORT}`);
+  const publicBase = BASE_URL === "/" ? "/" : BASE_URL;
+  console.log(`Annotator running at http://localhost:${PORT}${publicBase}`);
+  console.log(`[config] BASE_URL=${BASE_URL} DATASET_DIR=${DATASET_DIR} TMP_DIR=${TMP_DIR}`);
+  console.log(`[config] GROBID_URL=${GROBID_URL}`);
 });
