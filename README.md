@@ -1,129 +1,85 @@
 # Idea Annotator
 
-A minimal web app for annotating **Artifacts**, **Arguments**, and **Descriptors** from research papers.
+Web app for annotating **Artifacts**, **Arguments**, **Descriptors**, and **Relations** from research papers.
 
-## UI Flow (minimal clicks)
-1. Upload PDF.
-2. Metadata panel shows extracted + missing fields (missing highlighted).
-3. Read PDF in the embedded PDF.js viewer, highlight passages, then attach those highlights to an Artifact, Argument, or Descriptor.
-4. Create Artifacts first, then Arguments/Descriptors referencing Artifacts.
-5. Submit to save JSON alongside the parsed paper.
+## Run (local Node)
+```bash
+npm install
+PORT=3000 BASE_URL=/idea-annotator GROBID_URL=http://localhost:8070 npm run dev
+```
 
-## Internal Data Model (maps to JSON)
-The app keeps only the required first-class annotation objects and a small metadata wrapper.
+Key env vars:
+- `PORT`: server listen port (default `3000`)
+- `BASE_URL`: URL prefix for reverse proxy hosting (default `/`)
+- `GROBID_URL`: external Grobid endpoint (default `http://localhost:8070`)
+- `DATA_ROOT`: data root directory (default `./dataset`)
+- `DATASET_DIR`: override paper store directory (default `${DATA_ROOT}/papers`)
+- `TMP_DIR`: upload temp directory (default `./tmp`)
 
-```json
-{
-  "paper_id": "paper_1700000000000_ab12cd",
-  "schema_version": "0.1",
-  "metadata": {
-    "title": "...",
-    "authors": ["..."],
-    "doi": "...",
-    "year": "...",
-    "venue": "..."
-  },
-  "concepts": [
-    {
-      "concept_id": "C01",
-      "label": "Latent Dirichlet Allocation",
-      "aliases": ["LDA"],
-      "type": "model",
-      "source_refs": [{ "section": "Page 1", "page": 1, "text": "..." }]
-    }
-  ],
-  "arguments": [
-    {
-      "argument_id": "A01",
-      "text": "Latent Dirichlet Allocation is used for topic modeling.",
-      "arg_type": "claim",
-      "concept_refs": ["C01"],
-      "description": "...",
-      "source_refs": [{ "section": "Page 1", "page": 1, "text": "..." }]
-    }
-  ],
-  "descriptors": [
-    {
-      "descriptor_id": "D01",
-      "descriptor_type": "definition",
-      "concept_refs": ["C01"],
-      "source_refs": [{ "section": "Page 1", "page": 1, "text": "..." }]
-    }
-  ]
-}
+`BASE_PATH` is still accepted for backward compatibility, but `BASE_URL` is preferred.
+
+## Docker (persistent volumes)
+
+### Build image
+```bash
+docker build -t idea-annotator:latest .
+```
+
+### Run container
+```bash
+docker run -d \
+  --name idea-annotator \
+  -p 3000:3000 \
+  -e PORT=3000 \
+  -e BASE_URL=/idea-annotator \
+  -e GROBID_URL=http://host.docker.internal:8070 \
+  -v "$(pwd)/dataset:/app/dataset" \
+  -v "$(pwd)/tmp:/app/tmp" \
+  --add-host host.docker.internal:host-gateway \
+  idea-annotator:latest
 ```
 
 Notes:
-- `metadata` is UI-facing context.
-- `source_refs` keep the selected text plus coarse location (`section` + `page`).
+- `dataset` volume persists PDFs, TEI/MD, index, and annotation JSON files.
+- `tmp` volume persists temporary upload files (safe to clear when container is down).
+- For Grobid outside Docker, point `GROBID_URL` to a reachable host URL.
 
-## Tech Stack (fast to ship)
-- **Backend**: Node.js + Express + Multer
-- **PDF viewer**: PDF.js (served locally from `pdfjs-dist`)
-- **PDF metadata extraction**: `pdf-parse` (best effort)
-- **Metadata**: Crossref (optional, best-effort)
-- **Frontend**: Vanilla JS + HTML + CSS (no build tooling)
+## Docker Compose
+```bash
+APP_PORT=3000 PORT=3000 BASE_URL=/idea-annotator \
+GROBID_URL=http://host.docker.internal:8070 \
+docker compose up -d --build
+```
 
-Why this stack:
-- Lowest overhead for v0
-- No external parser dependency
-- Simple JSON outputs for evaluators
+Compose file mounts:
+- `./dataset -> /app/dataset`
+- `./tmp -> /app/tmp`
 
-## Run without reverse proxy
+## Caddy reverse proxy (path-based)
 
-1. Install dependencies and start:
-   ```bash
-   npm install
-   npm run dev
-   ```
-2. Open `http://localhost:3000`.
-
-## Run with Caddy reverse proxy
-1. setup or check for the reverse proxy setup
-  ```bash
-  nano /etc/caddy/Caddyfile
-  ```
-  ```bash
+Example:
+```caddy
 :8081 {
-  handle_path /idea-annotator/* {
+  handle /idea-annotator* {
     reverse_proxy 127.0.0.1:3000
   }
-
-  handle_path /static/* {
-    reverse_proxy 127.0.0.1:3030
-  }
-
-  handle_path /fuseki/* {
-    reverse_proxy 127.0.0.1:3030
-  }
 }
-  ```
-
-2. run the website
-  ```bash
-  BASE_PATH=/idea-annotator npm run dev
-  ```
-
-## File Layout
 ```
+
+Run app with:
+```bash
+BASE_URL=/idea-annotator PORT=3000 npm run dev
+```
+
+or in Docker/Compose with `BASE_URL=/idea-annotator`.
+
+## Data layout
+```text
 dataset/
   papers/
+    index.json
     paper_xxx.pdf
+    paper_xxx.tei.xml
+    paper_xxx.md
     paper_xxx.json
-```
-
-## error
-```
-$ BASE_PATH=/idea-annotator npm run dev
-
-> idea-viewer@0.1.0 dev
-> vite --host 0.0.0.0 --strictPort
-
-error when starting dev server:
-Error: Port 5173 is already in use
-    at Server.onError (file:///home/nipdep/Dev/idea-viewer/node_modules/vite/dist/node/chunks/dep-D4NMHUTW.js:25023:18)
-    at Server.emit (node:events:517:28)
-    at emitErrorNT (node:net:1838:8)
-    at process.processTicksAndRejections (node:internal/process/task_queues:82:21)
-
 ```

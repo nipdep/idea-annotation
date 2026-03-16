@@ -1,0 +1,24 @@
+services:
+  idea-annotator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: idea-annotator:latest
+    container_name: idea-annotator
+    restart: unless-stopped
+    environment:
+      PORT: ${PORT:-3000}
+      BASE_URL: ${BASE_URL:-/}
+      DATA_ROOT: /app/dataset
+      TMP_DIR: /app/tmp
+      GROBID_URL: ${GROBID_URL:-http://host.docker.internal:8070}
+      LLM_URL: ${LLM_URL:-http://host.docker.internal:1234/v1/chat/completions}
+      LLM_MODEL: ${LLM_MODEL:-qwen2.5-7b-instruct-1m}
+      LLM_MODE: ${LLM_MODE:-chat}
+    ports:
+      - "${APP_PORT:-3000}:${PORT:-3000}"
+    volumes:
+      - ./dataset:/app/dataset
+      - ./tmp:/app/tmp
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
